@@ -22,7 +22,7 @@ BankSalad Excel export를 안드로이드 휴대폰에서 직접 분석하고 �
 
 ## 기준 기술
 
-- Android: compile/target SDK 37, min SDK 26
+- Android: compile/target SDK 36, min SDK 26
 - Android Gradle Plugin 9.4.0
 - Gradle 9.6.0
 - ZIP: zip4j 2.11.6
