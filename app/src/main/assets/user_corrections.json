@@ -1,7 +1,7 @@
 {
-  "policy_version": "1.1.0",
-  "updated_at": "2026-09-07",
-  "description": "User-confirmed BankSalad corrections and reusable learned rules. Keep this file when upgrading program code.",
+  "policy_version": "2.0.0",
+  "updated_at": "2026-09-09",
+  "description": "User-confirmed BankSalad corrections and high-specificity learned rules aligned to Finance OS Canonical Policy v2.0.0. Keep across upgrades.",
   "source_key_overrides": {
     "2b7d5da17626d9079a76": {
       "action": {
@@ -66,7 +66,7 @@
         "minor": "보험금·보상금",
         "status": "확정",
         "semantics": "other_inflow",
-        "recognize_income": true
+        "recognize_income": false
       },
       "memo": "삼성화재 질병보상건 사용자확정"
     },
@@ -171,9 +171,73 @@
         "record_asset_move": false
       },
       "memo": "2026-09-02 기존 확정 paired transfer 동결"
+    },
+    "d5444bf2227e31680d44": {
+      "action": {
+        "name": "네이버 프리미엄콘텐츠",
+        "type": "소비지출",
+        "major": "교육·자기계발",
+        "minor": "교육·수강",
+        "status": "확정",
+        "semantics": "consumer_expense"
+      },
+      "memo": "2026-09-09 인생 전반 교육 콘텐츠 구독 사용자확정"
+    },
+    "66cb58a900972fe5fd61": {
+      "action": {
+        "name": "야근 외식비 정산송금",
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "외식",
+        "status": "확정",
+        "semantics": "consumer_expense"
+      },
+      "memo": "2026-09-07 야근 외식 비용을 결제자에게 카카오페이 송금 400원 사용자확정"
+    },
+    "b94ebaa46e4bb06e16b9": {
+      "action": {
+        "name": "야근 외식비 정산송금",
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "외식",
+        "status": "확정",
+        "semantics": "consumer_expense"
+      },
+      "memo": "2026-09-07 야근 외식 비용을 결제자에게 카카오페이 송금 8,100원 사용자확정"
+    },
+    "06727e07bcf6f6179e97": {
+      "action": {
+        "name": "경기지역화폐 충전",
+        "type": "자산이동",
+        "major": "자산이동",
+        "minor": "선불충전",
+        "status": "확정",
+        "semantics": "asset_move",
+        "record_asset_move": true
+      },
+      "memo": "2026-09-08 최신 Finance OS 정책: 지역화폐 충전은 소비가 아닌 자산이동. 기존 식비 인식 규칙 대체."
     }
   },
   "learned_rules": [
+    {
+      "id": "regional_currency_topup_v2",
+      "priority": 5,
+      "description": "최신 Finance OS 정책: 은행/현금계정에서 경기지역화폐 자체로 빠져나가는 충전은 소비가 아닌 자산이동/선불충전.",
+      "match": {
+        "raw_type_equals": "지출",
+        "content_equals": "경기지역화폐",
+        "direction": "outflow"
+      },
+      "action": {
+        "name": "경기지역화폐 충전",
+        "type": "자산이동",
+        "major": "자산이동",
+        "minor": "선불충전",
+        "status": "확정",
+        "semantics": "asset_move",
+        "record_asset_move": true
+      }
+    },
     {
       "id": "samsung_fire_claim_inflow",
       "priority": 10,
@@ -191,7 +255,7 @@
         "minor": "보험금·보상금",
         "status": "확정",
         "semantics": "other_inflow",
-        "recognize_income": true
+        "recognize_income": false
       }
     },
     {
@@ -212,6 +276,28 @@
         "type": "소비지출",
         "major": "생활용품",
         "minor": "생활서비스·구독",
+        "status": "확정",
+        "semantics": "consumer_expense"
+      }
+    },
+    {
+      "id": "premium_content_education_100",
+      "priority": 25,
+      "description": "네이버 프리미엄콘텐츠 + 서비스구독 + 네이버페이포인트 + 100원 패턴은 사용자 확인상 교육 콘텐츠 구독. 금액/채널 변경 시 재검토.",
+      "match": {
+        "raw_type_equals": "지출",
+        "raw_major_equals": "온라인쇼핑",
+        "raw_minor_equals": "서비스구독",
+        "content_equals": "프리미엄콘텐츠",
+        "payment_contains": "네이버페이",
+        "amount_equals": 100,
+        "direction": "outflow"
+      },
+      "action": {
+        "name": "네이버 프리미엄콘텐츠",
+        "type": "소비지출",
+        "major": "교육·자기계발",
+        "minor": "교육·수강",
         "status": "확정",
         "semantics": "consumer_expense"
       }
@@ -316,8 +402,10 @@
     }
   ],
   "notes": [
-    "Past confirmed transactions are frozen by source key.",
-    "Only high-specificity patterns are generalized to future transactions.",
-    "Coupang, unmatched KakaoPay transfers, convenience stores, and generic PG merchants remain review-first unless item/detail evidence exists."
+    "Past user-confirmed transactions are frozen by source key, except explicit policy migrations recorded in this file.",
+    "Only high-specificity patterns are generalized; ambiguous merchant-only patterns remain review-first.",
+    "보험금·보상금은 cash inflow일 수 있으나 recognized income으로 잡지 않는다.",
+    "경기지역화폐 최신 정본은 충전=자산이동, 실제 가맹점 사용=소비, 캐시백/인센티브=혜택유입이다.",
+    "카카오페이 송금은 수취인/메모가 없으면 일반화하지 않고 exact correction 또는 검토 큐를 사용한다."
   ]
 }

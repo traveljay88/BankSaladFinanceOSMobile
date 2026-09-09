@@ -1,57 +1,28 @@
-# Finance OS · BankSalad Android
+# BankSaladFinanceOSMobile v0.3.0
 
-BankSalad Excel export를 안드로이드 휴대폰에서 직접 분석하고 기존 Finance OS Google Sheet 및 Notion Weekly Snapshot에 반영하기 위한 개인용 Android 앱 프로젝트입니다.
+BankSalad ZIP/XLSX를 Android에서 직접 파싱해 Finance OS 거래원장·Weekly Snapshot으로 보내는 개인용 앱입니다.
 
-## 현재 구현된 기능
+## 핵심 구조
 
-- Gmail/Files에서 ZIP 또는 XLSX를 `공유`/`열기`로 앱에 전달
-- BankSalad 암호 ZIP 해제
-- `뱅샐현황` / `가계부 내역` OOXML 직접 파싱
-- PC Finance OS와 동일한 source-key 생성
-- 중복 제거
-- ±2초 동일금액 내부이체 페어링
-- 계정 별칭/분류 규칙
-- 사용자 보정 학습규칙
-- 마이너스통장 음수자산 이중계상 제거
-- 자산/부채/가용현금/고금리부채/순자산 Snapshot 계산
-- 앱 내 검토 큐 및 수동 확정
-- Android Keystore 보안 저장
-- Apps Script 백엔드를 통한 Google Sheets 반영
-- 선택적 Notion Weekly Snapshot 생성/갱신
-- 서버측 중복키 재검사
+`BankSalad ZIP/XLSX → Android parser → Finance Policy Engine → 검토/잠정 확정 → Apps Script → Google Sheets → (선택) Notion Weekly Snapshot`
 
-## 기준 기술
+## v0.3.0 핵심
 
+- Finance Policy **2.0.0** 내장 (`app/src/main/assets/finance_policy.json`)
+- Notion의 최신 Finance OS 의사결정 원칙을 회계/유동성/소비/부채/투자/정산/가족자본 규칙으로 통합
+- 검토 필요와 잠정을 모두 사람이 확인해야 전송 가능
+- Apps Script도 미확정 거래를 서버에서 재차 차단
+- 사용자 보정은 `user_corrections.json`과 휴대폰 로컬 보정으로 누적
 - Android: compile/target SDK 36, min SDK 26
-- Android Gradle Plugin 9.4.0
-- Gradle 9.6.0
-- ZIP: zip4j 2.11.6
-- Backend: Google Apps Script
 
-## 빌드
+정책 상세는 `FINANCE_POLICY.md`, 변경점은 `CHANGELOG.md`를 참고하세요.
 
-### Android Studio
+## 보안
 
-프로젝트 폴더를 Android Studio로 열고 `Build > Build APK(s)`를 실행합니다.
+- BankSalad ZIP 비밀번호와 APP_SECRET은 Android Keystore 기반 저장소를 사용합니다.
+- Google/Notion 장기 토큰은 APK에 포함하지 않습니다.
+- Apps Script 서버 비밀값은 Script Properties에 저장합니다.
 
-### PC 없이 GitHub에서 APK 빌드
+## 중요
 
-`.github/workflows/build-apk.yml`이 포함되어 있습니다.
-
-1. 이 프로젝트를 GitHub 저장소에 업로드
-2. GitHub 앱/모바일 브라우저에서 `Actions`
-3. `Build Android APK` 선택
-4. `Run workflow`
-5. 완료 후 `FinanceOS-BankSalad-debug-apk` artifact의 `app-debug.apk`를 내려받아 설치
-
-GitHub 호스팅 러너가 Android SDK/Gradle을 사용해 APK를 빌드하므로 로컬 PC에 Android Studio가 없어도 됩니다.
-
-## 백엔드
-
-`backend/SETUP.md` 참고.
-
-## 실제 설치 전 확인사항
-
-이 프로젝트의 Kotlin 파서 source-key는 실제 `2026-08-31~2026-09-07.xlsx`를 대상으로 기존 Python 자동화와 동일한 값이 생성되는 것을 확인했습니다. Kotlin 전체 소스와 Apps Script는 정적 컴파일/문법 검사를 통과했습니다.
-
-현재 작업 환경에는 Android SDK 전체 빌드 체인이 없어 여기서 실 APK까지 컴파일/기기 설치 테스트하지는 못했습니다. GitHub Actions 또는 Android Studio의 실제 Android SDK 빌드를 한 번 통과시킨 뒤 기기에 설치하는 단계가 필요합니다.
+이 앱은 Finance OS 원장의 자동 입력/분류 도구입니다. BankSalad 원본만으로 30일 미래 현금흐름이나 카드·세금·보험의 모든 예정 지급을 확정할 수 없으므로, 투자 게이트는 파일 하나만으로 자동 개방하지 않습니다.

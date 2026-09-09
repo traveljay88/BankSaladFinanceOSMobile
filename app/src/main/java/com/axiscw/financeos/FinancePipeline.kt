@@ -23,6 +23,7 @@ class FinancePipeline(
             val periodEnd = txns.maxOf { it.date }
             val (ledger, skipped) = ledgerRows(txns, existingKeys)
             val (snapshot, metrics) = parseSnapshot(reader, periodEnd)
+            val policyEval = cfg.financePolicy.evaluate(metrics)
             return AnalysisResult(
                 sourceFile = sourceFile,
                 periodStart = periodStart,
@@ -32,7 +33,11 @@ class FinancePipeline(
                 localSkipped = skipped,
                 snapshotRows = snapshot,
                 metrics = metrics,
-                allSourceKeys = txns.map { it.sourceKey }.toSet()
+                allSourceKeys = txns.map { it.sourceKey }.toSet(),
+                policyVersion = cfg.financePolicy.version,
+                policyMode = policyEval.mode,
+                policyAlerts = policyEval.alerts,
+                investmentGate = policyEval.investmentGate
             )
         }
     }
@@ -146,36 +151,83 @@ class FinancePipeline(
 
     private fun applyRuleAction(out: LinkedHashMap<String, Any?>, t: Txn, action: JSONObject, ruleId: String): LinkedHashMap<String, Any?> {
         val amount = abs(t.signedAmount)
+        val inflow = t.signedAmount > 0
         listOf("cash_in","cash_out","income","spend","interest","card_payment","asset_move","invest_in","invest_out","debt_principal","nonpnl_adj","net_income_effect")
             .forEach { out[it] = null }
         listOf("type","major","minor","status","include").forEach { if (action.has(it) && !action.isNull(it)) out[it] = action.get(it) }
         if (action.optString("name").isNotBlank()) out["name"] = action.getString("name")
+        fun cashIn() { if (t.account.kind in setOf("cash","wallet")) out["cash_in"] = amount }
+        fun cashOut() { if (t.account.kind in setOf("cash","wallet")) out["cash_out"] = amount }
         when (action.optString("semantics")) {
             "consumer_expense" -> {
                 out["type"] = action.optString("type", "소비지출"); out["spend"] = amount; out["net_income_effect"] = -amount
-                if (t.account.kind in setOf("cash","wallet")) out["cash_out"] = amount
+                if (!inflow) cashOut()
             }
             "financial_interest" -> {
                 out["type"] = action.optString("type", "금융비용"); out["interest"] = amount; out["net_income_effect"] = -amount
-                if (t.account.kind in setOf("cash","wallet")) out["cash_out"] = amount
+                if (!inflow) cashOut()
             }
             "income" -> {
                 out["type"] = action.optString("type", "소득"); out["income"] = amount; out["net_income_effect"] = amount
-                if (t.account.kind in setOf("cash","wallet")) out["cash_in"] = amount
+                if (inflow) cashIn()
             }
-            "other_inflow" -> {
+            "other_inflow", "insurance_compensation" -> {
                 out["type"] = action.optString("type", "기타유입·유출")
                 if (action.optBoolean("recognize_income", false)) out["income"] = amount
-                out["net_income_effect"] = amount
-                if (t.account.kind in setOf("cash","wallet")) out["cash_in"] = amount
+                out["net_income_effect"] = if (inflow) amount else -amount
+                if (inflow) cashIn() else cashOut()
+            }
+            "refund_cashback" -> {
+                out["type"] = action.optString("type", "기타유입·유출"); out["net_income_effect"] = if (inflow) amount else -amount
+                if (inflow) cashIn() else cashOut()
+            }
+            "family_capital_in" -> {
+                out["type"] = action.optString("type", "기타유입·유출"); out["nonpnl_adj"] = amount
+                if (inflow) cashIn()
+            }
+            "family_capital_out" -> {
+                out["type"] = action.optString("type", "기타유입·유출"); out["nonpnl_adj"] = -amount
+                if (!inflow) cashOut()
+            }
+            "family_pass_through" -> {
+                out["type"] = action.optString("type", "기타유입·유출"); out["include"] = "N"
+                if (inflow) cashIn() else cashOut()
+            }
+            "loan_proceeds" -> {
+                out["type"] = action.optString("type", "부채증가"); if (inflow) cashIn()
+            }
+            "debt_principal" -> {
+                out["type"] = action.optString("type", "부채상환"); out["debt_principal"] = amount; if (!inflow) cashOut()
+            }
+            "card_payment" -> {
+                out["type"] = action.optString("type", "자산이동"); out["card_payment"] = amount; if (!inflow) cashOut()
             }
             "asset_move" -> {
                 out["type"] = action.optString("type", "자산이동")
                 if (action.optBoolean("record_asset_move", true)) out["asset_move"] = amount
             }
+            "investment_in" -> {
+                out["type"] = action.optString("type", "자산이동"); out["invest_in"] = amount; if (!inflow) cashOut()
+            }
+            "investment_out" -> {
+                out["type"] = action.optString("type", "자산이동"); out["invest_out"] = amount; if (inflow) cashIn()
+            }
+            "settlement_prepayment" -> {
+                out["type"] = action.optString("type", "정산"); if (!inflow) cashOut()
+            }
+            "settlement_recovery" -> {
+                out["type"] = action.optString("type", "정산"); if (inflow) cashIn()
+            }
+            "asset_acquisition" -> {
+                out["type"] = action.optString("type", "자산취득·처분"); if (!inflow) cashOut()
+            }
+            "asset_disposal" -> {
+                out["type"] = action.optString("type", "자산취득·처분"); if (inflow) cashIn()
+            }
+            "debt_transfer" -> out["type"] = action.optString("type", "부채이동")
             "exclude" -> out["include"] = "N"
         }
-        out["note"] = "학습규칙:$ruleId"
+        out["note"] = "정책/학습규칙:$ruleId"
         return out
     }
 
@@ -212,10 +264,75 @@ class FinancePipeline(
         return null
     }
 
+    private fun textOf(t: Txn): String = "${t.content} ${t.memo} ${t.rawMajor} ${t.rawMinor}".trim()
+
+    private fun containsAny(text: String, words: List<String>): Boolean = words.any { text.contains(it, ignoreCase = true) }
+
+    private fun policyAction(out: LinkedHashMap<String, Any?>, t: Txn, semantics: String, type: String, major: String, minor: String, status: String, name: String? = null): LinkedHashMap<String, Any?> {
+        val action = JSONObject().apply {
+            put("semantics", semantics); put("type", type); put("major", major); put("minor", minor); put("status", status)
+            if (!name.isNullOrBlank()) put("name", name)
+            if (semantics == "other_inflow" || semantics == "insurance_compensation") put("recognize_income", false)
+        }
+        return applyRuleAction(out, t, action, "policy:$semantics")
+    }
+
     private fun classify(t: Txn): LinkedHashMap<String, Any?> {
         val amount = abs(t.signedAmount)
         val out = baseClassification()
         exactOrLearned(out, t)?.let { return it }
+        val text = textOf(t)
+        val inflow = t.signedAmount > 0
+
+        // Final cancellations/refunds/cashbacks are not new income. They are separate benefit/reversal flows.
+        if (inflow && containsAny(text, listOf("환불", "반환", "취소환급", "캐시백", "cashback", "리워드", "포인트적립", "인센티브"))) {
+            return policyAction(out, t, "refund_cashback", "기타유입·유출", "기타유입·유출", "환불·캐시백", "확정", t.content)
+        }
+        // Insurance compensation is cash inflow but not recognized salary/business income.
+        if (inflow && containsAny(text, listOf("보험금", "보상금", "질병보상", "상해보상", "교통사고 과실상계"))) {
+            return policyAction(out, t, "insurance_compensation", "기타유입·유출", "기타유입·유출", "보험금·보상금", "잠정", t.content)
+        }
+        // Borrowing inflow is not income.
+        if (inflow && containsAny(text, listOf("대출실행", "대출금입금", "신규대출", "차입금"))) {
+            return policyAction(out, t, "loan_proceeds", "부채증가", "부채증가", "대출실행", "확정", t.content)
+        }
+        // Explicit family capital: do not distort income/consumption.
+        if (inflow && containsAny(text, listOf("가족자본수증", "무상지원", "증여", "집 사라고 보태", "차값 지원"))) {
+            return policyAction(out, t, "family_capital_in", "기타유입·유출", "기타유입·유출", "가족자본수증", "잠정", t.content)
+        }
+        if (!inflow && containsAny(text, listOf("가족자본이전", "부모 자본이전"))) {
+            return policyAction(out, t, "family_capital_out", "기타유입·유출", "기타유입·유출", "가족자본이전", "잠정", t.content)
+        }
+        if (containsAny(text, listOf("가족통과자금", "통과자금"))) {
+            return policyAction(out, t, "family_pass_through", "기타유입·유출", "기타유입·유출", "가족통과자금", "잠정", t.content)
+        }
+        // SOHO/general settlement recovery is reimbursement, not personal income.
+        if (inflow && containsAny(text, listOf("정산회수", "실비 정산", "공동결제 회수", "참가자 정산"))) {
+            val minor = if (text.contains("SOHO", true) || text.contains("소호", true)) "SOHO 정산회수" else "일반 정산회수"
+            return policyAction(out, t, "settlement_recovery", "정산", "정산", minor, "확정", t.content)
+        }
+        if (!inflow && containsAny(text, listOf("SOHO 선결제", "소호 선결제", "공동비용 선결제", "실비 선결제"))) {
+            val minor = if (text.contains("SOHO", true) || text.contains("소호", true)) "SOHO 선결제" else "일반 선결제"
+            return policyAction(out, t, "settlement_prepayment", "정산", "정산", minor, "확정", t.content)
+        }
+        // Card settlement: cash flow only; card purchase was already recognized as expense.
+        if (!inflow && t.rawType == "이체" && containsAny(text, listOf("카드대금", "카드결제대금", "신용카드 결제", "카드값"))) {
+            return policyAction(out, t, "card_payment", "자산이동", "자산이동", "카드대금결제", "확정", t.content)
+        }
+        // Loan principal only when principal is explicitly separated. Combined principal+interest stays review-first.
+        if (!inflow && containsAny(text, listOf("원리금", "원금+이자", "원금 이자"))) {
+            return policyAction(out, t, "debt_transfer", "부채상환", "부채상환", "원리금 분리 필요", "검토 필요", t.content)
+        }
+        if (!inflow && containsAny(text, listOf("대출원금상환", "원금상환", "대출 원금")) && !text.contains("이자")) {
+            return policyAction(out, t, "debt_principal", "부채상환", "부채상환", "대출원금상환", "확정", t.content)
+        }
+        // Explicit investment flows. Internal transfers are still handled by transfer pairing below.
+        if (!inflow && containsAny(text, listOf("투자계좌입금", "증권계좌입금", "투자원금"))) {
+            return policyAction(out, t, "investment_in", "자산이동", "자산이동", "투자계좌입금", "잠정", t.content)
+        }
+        if (inflow && containsAny(text, listOf("투자계좌출금", "투자회수", "증권계좌출금"))) {
+            return policyAction(out, t, "investment_out", "자산이동", "자산이동", "투자계좌출금", "잠정", t.content)
+        }
 
         if (t.isMirror) {
             val minor = pairedTransferShape(t).first
@@ -236,13 +353,17 @@ class FinancePipeline(
         }
         if (t.rawType == "수입") {
             out["type"] = "소득"; out["major"] = "소득"; out["include"] = "Y"
-            out["minor"] = when {
+            val clearIncome = when {
                 t.content.contains("성과급") || t.content.contains("상여") -> "상여·성과급"
-                t.content.contains("이자") || t.rawMajor == "금융" -> "이자·배당"
-                t.rawMajor == "급여" -> "급여"
-                else -> "기타"
+                t.content.contains("급여") || t.rawMajor == "급여" -> "급여"
+                t.content.contains("이자") || t.content.contains("배당") || t.rawMajor == "금융" -> "이자·배당"
+                t.content.contains("월세") || t.content.contains("임대료") -> "월세"
+                t.content.contains("출장") || t.content.contains("여비") -> "여비"
+                else -> null
             }
-            out["status"] = "확정"; out["income"] = amount; out["net_income_effect"] = amount
+            out["minor"] = clearIncome ?: "기타"
+            out["status"] = if (clearIncome != null) "확정" else "잠정"
+            out["income"] = amount; out["net_income_effect"] = amount
             if (t.account.kind in setOf("cash","wallet")) out["cash_in"] = amount
             return out
         }
@@ -287,7 +408,7 @@ class FinancePipeline(
                 "비손익 순자산조정액" to n("nonpnl_adj"), "손익기준 순자산영향액" to n("net_income_effect"), "계산포함" to c["include"],
                 "검토상태" to merged, "중복후보" to "N", "중복키" to t.sourceKey
             )
-            out.add(LedgerRow(row, t.sourceKey, abs(t.signedAmount), t.account.kind))
+            out.add(LedgerRow(row, t.sourceKey, abs(t.signedAmount), t.signedAmount, t.account.kind))
         }
         return out to skipped
     }
@@ -397,47 +518,72 @@ class FinancePipeline(
     }
 
     companion object {
-        fun correctionAction(type: String, major: String, minor: String, accountKind: String, amount: Long): JSONObject {
-            val semantics = when (type) {
-                "금융비용" -> "financial_interest"
-                "소득" -> "income"
-                "기타유입·유출" -> "other_inflow"
-                "자산이동" -> "asset_move"
+        private fun manualSemantics(type: String, major: String, minor: String, signedAmount: Long): String {
+            val text = "$major $minor"
+            return when {
+                type == "금융비용" -> "financial_interest"
+                type == "소득" -> "income"
+                type == "정산" && signedAmount > 0 -> "settlement_recovery"
+                type == "정산" -> "settlement_prepayment"
+                type == "부채상환" -> "debt_principal"
+                type == "부채증가" -> "loan_proceeds"
+                type == "부채이동" -> "debt_transfer"
+                type == "자산취득·처분" && signedAmount > 0 -> "asset_disposal"
+                type == "자산취득·처분" -> "asset_acquisition"
+                type == "자산이동" && minor.contains("카드대금") -> "card_payment"
+                type == "자산이동" && minor.contains("투자계좌입금") -> "investment_in"
+                type == "자산이동" && minor.contains("투자계좌출금") -> "investment_out"
+                type == "자산이동" -> "asset_move"
+                type == "기타유입·유출" && text.contains("가족자본수증") -> "family_capital_in"
+                type == "기타유입·유출" && text.contains("가족자본이전") -> "family_capital_out"
+                type == "기타유입·유출" && text.contains("가족통과자금") -> "family_pass_through"
+                type == "기타유입·유출" && (text.contains("환불") || text.contains("캐시백")) -> "refund_cashback"
+                type == "기타유입·유출" && (text.contains("보험금") || text.contains("보상금")) -> "insurance_compensation"
+                type == "기타유입·유출" -> "other_inflow"
                 else -> "consumer_expense"
             }
+        }
+
+        fun correctionAction(type: String, major: String, minor: String, accountKind: String, signedAmount: Long): JSONObject {
+            val semantics = manualSemantics(type, major, minor, signedAmount)
             return JSONObject().apply {
                 put("type", type); put("major", major); put("minor", minor); put("status", "확정"); put("semantics", semantics)
                 if (semantics == "asset_move") put("record_asset_move", false)
-                if (semantics == "other_inflow") put("recognize_income", false)
+                if (semantics == "other_inflow" || semantics == "insurance_compensation") put("recognize_income", false)
             }
         }
 
         fun applyManualCorrection(row: LedgerRow, type: String, major: String, minor: String) {
             val amount = row.amount
+            val inflow = row.signedAmount > 0
+            val semantics = manualSemantics(type, major, minor, row.signedAmount)
             row.values["재무거래유형"] = type
             row.values["대분류"] = major
             row.values["소분류"] = minor
             row.values["검토상태"] = "확정"
             listOf("현금유입","현금유출","소득인식액","소비지출액","대출이자액","카드대금결제액","자산간이동액","투자원금액","투자회수액","자기자금 부채원금상환","비손익 순자산조정액","손익기준 순자산영향액")
                 .forEach { row.values[it] = "-" }
-            when (type) {
-                "금융비용" -> {
-                    row.values["대출이자액"] = amount; row.values["손익기준 순자산영향액"] = -amount
-                    if (row.accountKind in setOf("cash","wallet")) row.values["현금유출"] = amount
-                }
-                "소득" -> {
-                    row.values["소득인식액"] = amount; row.values["손익기준 순자산영향액"] = amount
-                    if (row.accountKind in setOf("cash","wallet")) row.values["현금유입"] = amount
-                }
-                "기타유입·유출" -> {
-                    row.values["손익기준 순자산영향액"] = amount
-                    if (row.accountKind in setOf("cash","wallet")) row.values["현금유입"] = amount
-                }
-                "자산이동" -> Unit
-                else -> {
-                    row.values["소비지출액"] = amount; row.values["손익기준 순자산영향액"] = -amount
-                    if (row.accountKind in setOf("cash","wallet")) row.values["현금유출"] = amount
-                }
+            fun cashIn() { if (row.accountKind in setOf("cash","wallet")) row.values["현금유입"] = amount }
+            fun cashOut() { if (row.accountKind in setOf("cash","wallet")) row.values["현금유출"] = amount }
+            when (semantics) {
+                "financial_interest" -> { row.values["대출이자액"] = amount; row.values["손익기준 순자산영향액"] = -amount; if (!inflow) cashOut() }
+                "income" -> { row.values["소득인식액"] = amount; row.values["손익기준 순자산영향액"] = amount; if (inflow) cashIn() }
+                "other_inflow", "insurance_compensation", "refund_cashback" -> { row.values["손익기준 순자산영향액"] = if (inflow) amount else -amount; if (inflow) cashIn() else cashOut() }
+                "family_capital_in" -> { row.values["비손익 순자산조정액"] = amount; if (inflow) cashIn() }
+                "family_capital_out" -> { row.values["비손익 순자산조정액"] = -amount; if (!inflow) cashOut() }
+                "family_pass_through" -> { row.values["계산포함"] = "N"; if (inflow) cashIn() else cashOut() }
+                "loan_proceeds" -> if (inflow) cashIn()
+                "debt_principal" -> { row.values["자기자금 부채원금상환"] = amount; if (!inflow) cashOut() }
+                "card_payment" -> { row.values["카드대금결제액"] = amount; if (!inflow) cashOut() }
+                "asset_move" -> Unit
+                "investment_in" -> { row.values["투자원금액"] = amount; if (!inflow) cashOut() }
+                "investment_out" -> { row.values["투자회수액"] = amount; if (inflow) cashIn() }
+                "settlement_prepayment" -> if (!inflow) cashOut()
+                "settlement_recovery" -> if (inflow) cashIn()
+                "asset_acquisition" -> if (!inflow) cashOut()
+                "asset_disposal" -> if (inflow) cashIn()
+                "debt_transfer" -> Unit
+                else -> { row.values["소비지출액"] = amount; row.values["손익기준 순자산영향액"] = -amount; if (!inflow) cashOut() }
             }
         }
     }

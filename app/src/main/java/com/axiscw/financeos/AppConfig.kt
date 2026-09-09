@@ -28,12 +28,16 @@ class AppConfig private constructor(
     val ledgerSheet: String,
     val snapshotSheet: String,
     val importLogSheet: String,
-    val notionDataSourceId: String
+    val notionDataSourceId: String,
+    val financePolicy: FinancePolicy
 ) {
     companion object {
         fun load(context: Context, state: StateStore): AppConfig {
             val cfg = JSONObject(context.assets.open("config.json").bufferedReader().use { it.readText() })
             val corrections = JSONObject(context.assets.open("user_corrections.json").bufferedReader().use { it.readText() })
+            val policyFile = cfg.optString("policy_file", "finance_policy.json")
+            val policyRaw = JSONObject(context.assets.open(policyFile).bufferedReader().use { it.readText() })
+            val financePolicy = FinancePolicy.from(policyRaw)
             val overrides = JSONObject()
             copyObject(corrections.optJSONObject("source_key_overrides"), overrides)
             copyObject(state.localCorrections(), overrides)
@@ -107,7 +111,8 @@ class AppConfig private constructor(
                 ledgerSheet = cfg.getJSONObject("sheets").getString("ledger"),
                 snapshotSheet = cfg.getJSONObject("sheets").getString("snapshot"),
                 importLogSheet = cfg.getJSONObject("sheets").getString("import_log"),
-                notionDataSourceId = "7fe4b6b5-3fe7-496e-b45c-8e557265c92d"
+                notionDataSourceId = "7fe4b6b5-3fe7-496e-b45c-8e557265c92d",
+                financePolicy = financePolicy
             )
         }
 

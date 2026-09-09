@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0",
+  "version": "2.0.0",
   "timezone": "Asia/Seoul",
   "finance_os_spreadsheet_id": "1_r-t5GpVuRmNrcT7SqrWaH0yB4u4v2r19qm-AVY5tUA",
   "sheets": {
@@ -216,12 +216,6 @@
   ],
   "merchant_overrides": [
     {
-      "contains": "경기지역화폐",
-      "major": "식비",
-      "minor": "외식",
-      "status": "확정"
-    },
-    {
       "contains": "서울시설공단",
       "major": "교통·차량",
       "minor": "주차",
@@ -306,6 +300,11 @@
       "교통·차량",
       "주차",
       "확정"
+    ],
+    "금융|은행": [
+      "기타 생활비",
+      "사용처 검증 필요",
+      "검토 필요"
     ]
   },
   "snapshot_policy": {
@@ -344,7 +343,7 @@
       "편의점",
       "PG사 일반결제"
     ],
-    "reason": "동일 원본 패턴에서 서로 다른 경제적 성격이 실제 확인되어 merchant-only 자동분류가 불안정함",
+    "reason": "동일 원본 패턴에서 서로 다른 경제적 성격이 실제 확인되었거나, 최신 Finance OS 정책상 원본만으로 손익 성격을 확정할 수 없어 merchant-only 자동분류를 금지함",
     "examples": {
       "쿠팡_쿠페이": "식재료와 가습기가 동일 merchant로 들어옴",
       "카카오페이 미매칭 이체": "11,000원은 술·유흥, 26,000원은 외식으로 서로 다름",
@@ -359,5 +358,20 @@
       "reason": "보험금은 근로·사업소득과 분리된 비정기 보상 유입으로 관리"
     }
   ],
-  "source_key_version": "v1"
+  "source_key_version": "v1",
+  "policy_file": "finance_policy.json",
+  "policy_migrations": [
+    {
+      "id": "regional_currency_v2",
+      "from": "충전=식비/외식",
+      "to": "충전=자산이동/선불충전; 실제 가맹점 결제=소비; 캐시백=혜택 유입",
+      "effective": "2026-09-08"
+    },
+    {
+      "id": "monthly_budget_v2",
+      "from": "230만원 목표/250만원 상한",
+      "to": "생활소비 200만원 + 선택소비 50만원",
+      "effective": "2026-09-06"
+    }
+  ]
 }

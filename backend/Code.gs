@@ -18,7 +18,7 @@ function doPost(e) {
   try {
     const body = JSON.parse((e.postData && e.postData.contents) || '{}');
     verifySecret_(body.secret || '');
-    if (body.action === 'health') return json_({ok:true, message:'Finance OS Mobile backend ready'});
+    if (body.action === 'health') return json_({ok:true, message:'Finance OS Mobile backend ready', backendVersion:'0.3.0', policyVersion:'2.0.0'});
     if (body.action !== 'import') throw new Error('Unsupported action');
     return json_(importFinanceOs_(body));
   } catch (err) {
@@ -33,6 +33,12 @@ function verifySecret_(candidate) {
 }
 
 function importFinanceOs_(body) {
+  const reviewCount = Number(body.reviewCount || 0);
+  const provisionalCount = Number(body.provisionalCount || 0);
+  const unresolvedRows = (body.ledgerRows || []).filter(r => ['검토 필요','잠정'].indexOf(String(r['검토상태'] || '')) >= 0);
+  if (reviewCount > 0 || provisionalCount > 0 || unresolvedRows.length > 0) {
+    throw new Error('Unresolved transactions block import: review=' + reviewCount + ', provisional=' + provisionalCount + ', rows=' + unresolvedRows.length);
+  }
   const p = PropertiesService.getScriptProperties();
   const spreadsheetId = p.getProperty('FINANCE_OS_SPREADSHEET_ID') || '1_r-t5GpVuRmNrcT7SqrWaH0yB4u4v2r19qm-AVY5tUA';
   const ss = SpreadsheetApp.openById(spreadsheetId);
@@ -78,8 +84,8 @@ function importFinanceOs_(body) {
     'Total_Liabilities': Number(m.totalLiabilities || 0),
     'BS_보정순자산(보험·연금포함)': Number(m.bsCorrectedNetWorth || 0),
     'Overdraft_Available': Number(m.availableOverdraft || 0),
-    'Status': Number(body.reviewCount || 0) > 0 ? '완료(검토필요 존재)' : '완료',
-    'Notes': 'BankSalad Android app import. 마통 음수자산은 자산측 순자산에서 제외하고 부채로만 1회 인식.',
+    'Status': '완료',
+    'Notes': 'BankSalad Android app import. Policy ' + String(body.policyVersion || 'unknown') + ' / ' + String(body.policyMode || '') + '. 마통 음수자산은 자산측 순자산에서 제외하고 부채로만 1회 인식. 잠정/검토 거래는 서버에서 차단.',
     'Finance_OS_비교순자산': Number(m.financeOsNetWorth || 0)
   };
   logSheet.getRange(logSheet.getLastRow()+1, 1, 1, IMPORT_LOG_HEADERS.length)
@@ -152,7 +158,7 @@ function upsertNotionSnapshot_(body) {
   const provisionalCount = Number(body.provisionalCount || 0);
   const unmapped = Number(m.unmappedSnapshotAccounts || 0);
   const dataStatus = (reviewCount === 0 && provisionalCount === 0 && unmapped === 0) ? '확정' : '잠정';
-  const reconcileStatus = (reviewCount === 0 && unmapped === 0) ? '일치' : '부분검증';
+  const reconcileStatus = (reviewCount === 0 && provisionalCount === 0 && unmapped === 0) ? '일치' : '부분검증';
 
   const props = {
     '스냅샷명': {title:[{type:'text', text:{content:title}}]},
@@ -217,13 +223,14 @@ function notionFetch_(token, url, method, body) {
 function verificationMemo_(body) {
   const m = body.metrics || {};
   return [
-    'BankSalad Android app 자동 반영.',
+    'BankSalad Android app 자동 반영. Policy ' + String(body.policyVersion || 'unknown') + ' / mode ' + String(body.policyMode || '') + '.',
     '원본 거래 ' + Number(body.transactionRowsRead || 0) + '건.',
     '검토 필요 ' + Number(body.reviewCount || 0) + '건 / 잠정 ' + Number(body.provisionalCount || 0) + '건.',
     '총부채 ' + Number(m.totalLiabilities || 0) + '원, 가용현금 ' + Number(m.availableOverdraft || 0) + '원, 7% 이상 부채 ' + Number(m.highRateLiabilities || 0) + '원.',
     'Finance OS 비교가능 순자산 ' + Number(m.financeOsNetWorth || 0) + '원.',
     '마이너스통장 음수자산은 부채와 중복되므로 자산측 순자산 계산에서 제외.',
-    'Snapshot 미매핑 계정 ' + Number(m.unmappedSnapshotAccounts || 0) + '개.'
+    'Snapshot 미매핑 계정 ' + Number(m.unmappedSnapshotAccounts || 0) + '개.',
+    '투자게이트 ' + String(body.investmentGate || 'UNKNOWN') + '.'
   ].join(' ');
 }
 
@@ -233,6 +240,8 @@ function snapshotMarkdown_(body, dataStatus, reconcileStatus) {
   return [
     '## ' + body.periodEnd + ' 핵심 스냅샷',
     '',
+    '- Finance Policy: **' + String(body.policyVersion || 'unknown') + ' / ' + String(body.policyMode || '') + '**',
+    '- 투자게이트: **' + String(body.investmentGate || 'UNKNOWN') + '**',
     '- 계좌·현금: **' + money(m.financeCash) + '**',
     '- 가용현금: **' + money(m.availableOverdraft) + '**',
     '- 투자평가액: **' + money(m.investmentEval) + '**',

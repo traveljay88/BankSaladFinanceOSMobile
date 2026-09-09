@@ -33,6 +33,7 @@ data class LedgerRow(
     val values: LinkedHashMap<String, Any?>,
     val sourceKey: String,
     val amount: Long,
+    val signedAmount: Long,
     val accountKind: String
 ) {
     val status: String get() = values["검토상태"]?.toString() ?: "검토 필요"
@@ -66,10 +67,15 @@ data class AnalysisResult(
     val localSkipped: Int,
     val snapshotRows: List<LinkedHashMap<String, Any?>>,
     val metrics: SnapshotMetrics,
-    val allSourceKeys: Set<String>
+    val allSourceKeys: Set<String>,
+    val policyVersion: String,
+    val policyMode: String,
+    val policyAlerts: List<String>,
+    val investmentGate: String
 ) {
     val reviewRows: List<LedgerRow> get() = ledgerRows.filter { it.status == "검토 필요" }
     val provisionalRows: List<LedgerRow> get() = ledgerRows.filter { it.status == "잠정" }
+    val unresolvedRows: List<LedgerRow> get() = ledgerRows.filter { it.status == "검토 필요" || it.status == "잠정" }
     val confirmedRows: List<LedgerRow> get() = ledgerRows.filter { it.status == "확정" || it.status == "자동확정" }
 
     fun recognizedSpend(): Long = ledgerRows.sumOf { (it.values["소비지출액"] as? Number)?.toLong() ?: 0L }

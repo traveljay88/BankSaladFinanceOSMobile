@@ -1,0 +1,196 @@
+{
+  "policy_version": "2.0.0",
+  "app_target_version": "0.3.0",
+  "updated_at": "2026-09-09",
+  "timezone": "Asia/Seoul",
+  "title": "Finance OS Canonical Policy Engine",
+  "purpose": "BankSalad 원본을 Finance OS 경제적 실질 기준으로 분류하고, 유동성·부채·투자 의사결정의 최신 정본 원칙을 앱에 적용한다.",
+  "precedence": [
+    "사용자의 최신 명시적 사실확인/보정",
+    "현재유효 Finance Decision Report 및 최신 정정 블록",
+    "Finance OS 거래원장·표준분류·Weekly Snapshot 최신 원본",
+    "과거 리포트/스냅샷은 역사값으로만 사용"
+  ],
+  "sources": [
+    {
+      "name": "Finance OS 재무 안정화",
+      "notion_page_id": "3a43b42c-7635-813e-8fcc-d66a3dbd8ec4",
+      "as_of": "2026-09-08",
+      "status": "current"
+    },
+    {
+      "name": "2026 하반기 현금흐름·소비·유동성 통합 운영계획",
+      "notion_page_id": "3c33b42c-7635-81a9-bbe2-ea53cd27f4f7",
+      "as_of": "2026-09-06",
+      "status": "current"
+    },
+    {
+      "name": "2014~2026 거래원장 기반 13년 재무 총괄 평가",
+      "notion_page_id": "3c23b42c-7635-8148-afad-cd3b1a57bdb2",
+      "as_of": "2026-09-06",
+      "status": "current"
+    },
+    {
+      "name": "2014~2026 소비지출 장기추세·항목별 구조분석",
+      "notion_page_id": "3ca3b42c-7635-81fa-b5b1-f33f22ab3277",
+      "as_of": "2026-09-07",
+      "status": "superseded_for_budget_but_canonical_for_classification_context"
+    },
+    {
+      "name": "2014~2026 총 투자성과·수익률 분석",
+      "notion_page_id": "3c33b42c-7635-812f-93c0-dc0939a607ae",
+      "as_of": "2026-08-26",
+      "status": "current"
+    },
+    {
+      "name": "나 ↔ 부모 금전거래 정리 보고서 | 2016~2026",
+      "notion_page_id": "3c33b42c-7635-813d-9afb-e530e226513e",
+      "as_of": "2026-08-21",
+      "status": "current"
+    },
+    {
+      "name": "2026-09-07 BankSalad Weekly Snapshot",
+      "notion_page_id": "3d43b42c-7635-81ea-b8ee-d3c92f7e97e5",
+      "as_of": "2026-09-07",
+      "status": "snapshot"
+    }
+  ],
+  "accounting_semantics": {
+    "recognized_income": {
+      "description": "급여·상여·사업수익·이자·배당·실현 경제소득. 실제 소득만 인식한다.",
+      "pnl": true
+    },
+    "consumer_expense": {
+      "description": "생활·세금·보험·수수료 등 실제 비용. 카드대금 출금·정산회수·내부이체는 소비로 중복 인식하지 않는다.",
+      "pnl": true
+    },
+    "financial_interest": {
+      "description": "대출이자는 원금과 분리한 금융비용.",
+      "pnl": true
+    },
+    "card_purchase": {
+      "description": "카드 승인 시 소비를 인식하되 현금유출은 0. 카드대금 결제 시 현금유출만 기록하고 소비는 재인식하지 않는다."
+    },
+    "card_payment": {
+      "description": "이미 인식된 카드소비의 결제 현금흐름. 소비지출 0."
+    },
+    "asset_move": {
+      "description": "계좌·전자지갑·비투자 자산 간 이동. 손익·순자산 영향 0."
+    },
+    "debt_principal": {
+      "description": "자기자금으로 대출원금을 줄인 금액. 소비가 아니라 부채 감소."
+    },
+    "loan_proceeds": {
+      "description": "신규 차입 현금유입. 소득이 아니며 순자산 영향 0."
+    },
+    "investment_in": {
+      "description": "일반자금/차입자금에서 투자계좌로 투입한 원금. 소비 아님."
+    },
+    "investment_out": {
+      "description": "투자계좌에서 일반자금으로 회수한 자금. 소득/손실과 분리."
+    },
+    "investment_internal_transfer": {
+      "description": "투자계좌 사이 동일자금 이동은 총투입·총회수에서 제외."
+    },
+    "nonpnl_adjustment": {
+      "description": "증여·가족자본·평가·기초잔액·구조변화 등 손익 외 순자산 조정."
+    },
+    "refund_cashback": {
+      "description": "반품·환불·캐시백·혜택 유입은 신규 소득/소비와 분리하고 원소비의 경제효과를 상계."
+    },
+    "settlement_prepayment": {
+      "description": "SOHO/공동비용 선결제는 개인소비와 분리. 최종 개인부담은 정산회수 후 계산."
+    },
+    "settlement_recovery": {
+      "description": "참가자·동행인 정산회수는 개인소득이 아니다."
+    },
+    "family_capital_in": {
+      "description": "부모의 무상지원은 가족자본수증 V+. 현금 입금은 현금유입을 유지하지만 인식수입은 0."
+    },
+    "family_capital_out": {
+      "description": "부모/가족으로의 자본 이전은 가족자본이전 V-. 생활소비가 아니다."
+    },
+    "family_pass_through": {
+      "description": "가족을 경유한 통과자금은 개인 경제성과 계산에서 제외."
+    },
+    "insurance_compensation": {
+      "description": "보험금·보상금은 실제 현금유입이나 근로·사업·일반 소득으로 인식하지 않는다."
+    }
+  },
+  "liquidity_policy": {
+    "available_cash_definition": "금융기관 원본/사용자 확인으로 한도가 확정된 운영형 마이너스통장 잔여한도 합계",
+    "available_cash_floor_krw": 5500000,
+    "floor_rule": "1개월 필수지출이 550만원보다 크면 더 높은 금액을 적용",
+    "exclude_from_available_cash": [
+      "공제조합·신협 저축성 잔액",
+      "미입금 성과급·상여·예상수입",
+      "거래정지/즉시현금화 불가능 자산"
+    ],
+    "priority": [
+      "향후 30일 카드·주담대·보험·세금·필수 자동이체 방어",
+      "가용현금 하한 확보",
+      "7% 이상 고금리부채 상환",
+      "비정기 필수지출 적립",
+      "잔여자금 투자 검토"
+    ],
+    "future_income_rule": "실제 입금 전에는 가용현금·소비재원으로 계산하지 않는다."
+  },
+  "spending_policy": {
+    "current_monthly_living_cap_krw": 2000000,
+    "current_monthly_discretionary_cap_krw": 500000,
+    "historical_230_250_rule_active": false,
+    "food_control_line_krw": 550000,
+    "vehicle_control_line_krw": 450000,
+    "gambling_game_budget_krw": 0,
+    "irregular_discretionary_rule": "여행·사교·가족지원·게임·고가 생활용품은 당월 예산 잔액이 있을 때만 실행",
+    "soho_prepayment_settlement_days": 14
+  },
+  "debt_policy": {
+    "high_rate_threshold_pct": 7.0,
+    "current_payoff_order_pct": [
+      13.0,
+      9.13,
+      8.66
+    ],
+    "reconfirm_rates_from_latest_snapshot": true,
+    "do_not_require_woori_overdraft_full_payoff_first": true,
+    "no_optional_prepayment_below_liquidity_floor": true,
+    "principle": "30일 필수결제 유동성과 가용현금 하한을 먼저 확보한 뒤 고금리부채를 상환한다."
+  },
+  "investment_policy": {
+    "new_high_risk_investment_before_stabilization_krw": 0,
+    "gate_all_required": true,
+    "start_conditions": [
+      "가용현금 >= 5,500,000원",
+      "7% 이상 부채 = 0원",
+      "30일 예상잔액 >= 0원",
+      "카드·세금·보험 납부위험 없음"
+    ],
+    "borrowed_money_rule": "대출한도/대출금은 투자 가능 자기자금으로 보지 않으며 투자손실 보전용으로 전환하지 않는다.",
+    "roi_rule": "투자원금·회수·종료계좌·수수료/세금 대사가 불완전하면 XIRR/ROI를 확정하지 않는다."
+  },
+  "classification_policy": {
+    "economic_substance_over_context": true,
+    "relationship_context_rule": "연애·가족·여행 맥락은 별도 메타데이터로 보존하되 식비·여행·술·주거 등 경제적 분류는 유지한다.",
+    "travel_context_rule": "여행 총원가는 여행 맥락으로 연결된 여러 경제적 카테고리를 합산하되 원장 카테고리는 실제 지출 성격을 유지한다.",
+    "review_first_when_ambiguous": true,
+    "canceled_intermediate_approvals": "변경·취소·반환된 중간 승인건은 최종 소비에서 제외하고 최종 유효 거래와 수수료만 인정"
+  },
+  "regional_currency_policy": {
+    "topup": "자산이동/선불충전",
+    "merchant_purchase": "실제 가맹점 결제 시 소비지출",
+    "incentive_cashback": "기타유입·유출/환불·캐시백 또는 혜택 유입",
+    "track_spend_and_benefit_separately": true,
+    "note": "과거 충전=식비 인식 규칙은 폐기한다."
+  },
+  "data_quality_policy": {
+    "unresolved_blocks_import": true,
+    "unresolved_statuses": [
+      "검토 필요",
+      "잠정"
+    ],
+    "duplicate_policy": "동일 거래 증빙/스크린샷은 새 거래를 만들지 않고 기존 거래의 증빙·보정에 사용",
+    "snapshot_policy": "마이너스통장 음수 자산은 동일 부채와 이중계상하지 않고 자산측 순자산에서 제외",
+    "latest_data_first": true
+  }
+}

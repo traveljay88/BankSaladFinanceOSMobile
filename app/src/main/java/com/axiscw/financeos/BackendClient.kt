@@ -18,6 +18,10 @@ class BackendClient(private val endpoint: String, private val secret: String) {
             put("localSkipped", result.localSkipped)
             put("reviewCount", result.reviewRows.size)
             put("provisionalCount", result.provisionalRows.size)
+            put("policyVersion", result.policyVersion)
+            put("policyMode", result.policyMode)
+            put("investmentGate", result.investmentGate)
+            put("policyAlerts", JSONArray(result.policyAlerts))
             put("ledgerRows", rowsToJson(result.ledgerRows.map { it.values }))
             put("snapshotRows", rowsToJson(result.snapshotRows))
             put("metrics", JSONObject().apply {

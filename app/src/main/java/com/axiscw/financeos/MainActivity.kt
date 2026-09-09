@@ -60,7 +60,7 @@ class MainActivity : Activity() {
             setTypeface(typeface, Typeface.BOLD)
         })
         root.addView(TextView(this).apply {
-            text = "휴대폰에서 BankSalad ZIP/XLSX를 분석하고 Finance OS에 반영합니다. Gmail 첨부파일에서 이 앱으로 공유해도 됩니다."
+            text = "BankSalad ZIP/XLSX를 Finance OS 최신 정책엔진으로 분석합니다. 검토 필요·잠정이 모두 해소돼야 반영할 수 있습니다."
             textSize = 14f
             setPadding(0, dp(6), 0, dp(18))
         })
@@ -91,7 +91,7 @@ class MainActivity : Activity() {
         }
         root.addView(summary, full())
 
-        root.addView(sectionTitle("3. 검토 큐"))
+        root.addView(sectionTitle("3. 검토 큐 · 잠정 포함"))
         reviewBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(reviewBox, full())
 
@@ -232,24 +232,28 @@ class MainActivity : Activity() {
             append("가용현금  ${nf.format(r.metrics.availableOverdraft)}원\n")
             append("7%+ 부채  ${nf.format(r.metrics.highRateLiabilities)}원\n")
             append("Finance OS 순자산  ${nf.format(r.metrics.financeOsNetWorth)}원\n")
-            append("Snapshot 미매핑 계정  ${r.metrics.unmappedSnapshotAccounts}개")
+            append("Snapshot 미매핑 계정  ${r.metrics.unmappedSnapshotAccounts}개\n\n")
+            append("정책  ${r.policyMode} · Policy ${r.policyVersion}\n")
+            append("투자게이트  ${r.investmentGate}\n")
+            r.policyAlerts.take(4).forEach { append("• $it\n") }
         }
         renderReviews(r)
-        sendButton.isEnabled = r.reviewRows.isEmpty() && r.snapshotRows.isNotEmpty()
+        sendButton.isEnabled = r.unresolvedRows.isEmpty() && r.snapshotRows.isNotEmpty()
     }
 
     private fun renderReviews(r: AnalysisResult) {
         reviewBox.removeAllViews()
-        val reviews = r.reviewRows
-        if (reviews.isEmpty()) {
-            reviewBox.addView(TextView(this).apply { text = "검토 필요 거래 없음"; setPadding(0, dp(4), 0, dp(6)) })
+        val unresolved = r.unresolvedRows
+        if (unresolved.isEmpty()) {
+            reviewBox.addView(TextView(this).apply { text = "검토 필요·잠정 거래 없음"; setPadding(0, dp(4), 0, dp(6)) })
             return
         }
-        reviews.forEach { row ->
+        unresolved.forEach { row ->
             val b = Button(this).apply {
                 isAllCaps = false
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                text = "${row.values["거래일"]} · ${row.values["거래명"]} · ${formatMoney(row.amount)}원\n${row.values["대분류"]} / ${row.values["소분류"]}"
+                val badge = if (row.status == "잠정") "[잠정]" else "[검토]"
+                text = "$badge ${row.values["거래일"]} · ${row.values["거래명"]} · ${formatMoney(row.amount)}원\n${row.values["대분류"]} / ${row.values["소분류"]}"
                 setOnClickListener { correctionDialog(r, row) }
             }
             reviewBox.addView(b, full())
@@ -259,7 +263,7 @@ class MainActivity : Activity() {
     private fun correctionDialog(result: AnalysisResult, row: LedgerRow) {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(6), dp(18), 0) }
         val typeSpinner = Spinner(this)
-        val types = arrayOf("소비지출", "자산이동", "금융비용", "기타유입·유출", "소득")
+        val types = arrayOf("소비지출", "금융비용", "소득", "기타유입·유출", "자산이동", "정산", "부채증가", "부채상환", "부채이동", "자산취득·처분")
         typeSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, types)
         val currentType = row.values["재무거래유형"]?.toString()
         typeSpinner.setSelection(types.indexOf(currentType).coerceAtLeast(0))
@@ -277,7 +281,7 @@ class MainActivity : Activity() {
                 val min = minor.text.toString().trim()
                 if (maj.isBlank() || min.isBlank()) return@setPositiveButton
                 FinancePipeline.applyManualCorrection(row, type, maj, min)
-                state.saveLocalCorrection(row.sourceKey, FinancePipeline.correctionAction(type, maj, min, row.accountKind, row.amount))
+                state.saveLocalCorrection(row.sourceKey, FinancePipeline.correctionAction(type, maj, min, row.accountKind, row.signedAmount))
                 renderResult(result)
                 log("사용자 확정: ${row.values["거래명"]} → $maj / $min")
             }.show()
@@ -291,7 +295,7 @@ class MainActivity : Activity() {
         Thread {
             try {
                 val res = BackendClient(url, secret).health()
-                runOnUiThread { log("서버 연결 성공: ${res.optString("message", "OK")}"); toast("Finance OS 서버 연결 성공") }
+                runOnUiThread { log("서버 연결 성공: ${res.optString("message", "OK")} · backend ${res.optString("backendVersion", "?")} · policy ${res.optString("policyVersion", "?")}"); toast("Finance OS 서버 연결 성공") }
             } catch (e: Exception) {
                 runOnUiThread { log("서버 연결 실패: ${e.message}"); toast("서버 연결 실패") }
             }
@@ -300,7 +304,7 @@ class MainActivity : Activity() {
 
     private fun sendToFinanceOs() {
         val result = current ?: return toast("먼저 분석하세요.")
-        if (result.reviewRows.isNotEmpty()) return toast("검토 필요 거래를 먼저 확정하세요.")
+        if (result.unresolvedRows.isNotEmpty()) return toast("검토 필요·잠정 거래를 모두 확정하세요.")
         saveSettings()
         val url = endpoint.text.toString().trim(); val secret = backendSecret.text.toString()
         if (url.isBlank() || secret.isBlank()) return toast("Apps Script URL과 APP_SECRET을 설정하세요.")
@@ -319,7 +323,7 @@ class MainActivity : Activity() {
                     sendButton.isEnabled = false
                 }
             } catch (e: Exception) {
-                runOnUiThread { log("반영 실패: ${e.message}"); toast("반영 실패"); sendButton.isEnabled = true }
+                runOnUiThread { log("반영 실패: ${e.message}"); toast("반영 실패"); sendButton.isEnabled = result.unresolvedRows.isEmpty() }
             }
         }.start()
     }
