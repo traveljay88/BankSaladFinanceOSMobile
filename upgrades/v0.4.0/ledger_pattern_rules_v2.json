@@ -1,0 +1,1160 @@
+{
+  "version": "2.0.0",
+  "generated_from": "Finance OS 01_거래원장",
+  "window": "2024-01-01~latest",
+  "stats": {
+    "rows_window": 4464,
+    "confirmed_rows": 4370,
+    "rows_2026": 927,
+    "stable_exact_merchant_rules": 53,
+    "stable_amount_specific_rules": 40
+  },
+  "hard_rules": [
+    {
+      "id": "exclude_all_1won",
+      "match": {
+        "amount_abs_equals": 1
+      },
+      "action": {
+        "semantics": "exclude",
+        "reason": "본인인증 1원 거래"
+      }
+    },
+    {
+      "id": "public_agency_swimming",
+      "match": {
+        "content_equals": "공공기관",
+        "amount_abs_equals": 4000
+      },
+      "action": {
+        "type": "소비지출",
+        "major": "여행·여가·문화",
+        "minor": "운동·레저",
+        "status": "확정",
+        "name": "수영장 이용료"
+      }
+    },
+    {
+      "id": "balssan_station_hof",
+      "match": {
+        "content_equals": "정도진흥기업(주)강서점"
+      },
+      "action": {
+        "type": "소비지출",
+        "major": "술·사교",
+        "minor": "술·유흥",
+        "status": "확정",
+        "name": "발산역 역전할머니맥주"
+      }
+    },
+    {
+      "id": "person_inflow_settlement_candidate",
+      "match": {
+        "raw_type_equals": "이체",
+        "direction": "inflow",
+        "content_person_name": true,
+        "paired": false
+      },
+      "action": {
+        "type": "정산",
+        "major": "정산",
+        "minor": "일반 정산회수",
+        "status": "candidate"
+      }
+    }
+  ],
+  "stable_exact_merchants": [
+    {
+      "merchant": "(주)현대가스텍 파동충전소",
+      "count_2024_2026": 18,
+      "count_2026": 18,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "주유",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "LG유플러스통신요금",
+      "count_2024_2026": 26,
+      "count_2026": 11,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "주거·공과금",
+        "minor": "이동통신",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "현대가스텍파동충전소",
+      "count_2024_2026": 20,
+      "count_2026": 11,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "주유",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "모바일티머니선불형",
+      "count_2024_2026": 11,
+      "count_2026": 8,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "대중교통",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "LG U+ 통신요금 자동이체",
+      "count_2024_2026": 8,
+      "count_2026": 8,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "주거·공과금",
+        "minor": "이동통신",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "아파트관리비",
+      "count_2024_2026": 19,
+      "count_2026": 6,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "주거·공과금",
+        "minor": "관리비",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "경기지역화폐 충전 인센티브",
+      "count_2024_2026": 43,
+      "count_2026": 5,
+      "consistency": 1.0,
+      "action": {
+        "type": "환불·취소",
+        "major": "기타유입·유출",
+        "minor": "환불·캐시백",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "사계절반찬",
+      "count_2024_2026": 29,
+      "count_2026": 5,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "장보기·집밥재료",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "카카오 - 서울시설공단",
+      "count_2024_2026": 11,
+      "count_2026": 5,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "주차",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "모두탑365정형외과의원 발산점",
+      "count_2024_2026": 5,
+      "count_2026": 5,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "의료·건강",
+        "minor": "병원·약국",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "뚜레쥬르가양점",
+      "count_2024_2026": 10,
+      "count_2026": 4,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "간식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "CHARGE SPOT",
+      "count_2024_2026": 4,
+      "count_2026": 4,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "생활용품",
+        "minor": "생활서비스·구독",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "프리미엄콘텐츠",
+      "count_2024_2026": 4,
+      "count_2026": 4,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "교육·자기계발",
+        "minor": "교육·수강",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "야놀자 - 주식회사 인터파크",
+      "count_2024_2026": 6,
+      "count_2026": 3,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "여행·여가·문화",
+        "minor": "여행·숙박",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "서울도시가스자동이체",
+      "count_2024_2026": 4,
+      "count_2026": 3,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "주거·공과금",
+        "minor": "공과금",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "모두탑365정형외과의원발산점",
+      "count_2024_2026": 3,
+      "count_2026": 3,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "의료·건강",
+        "minor": "병원·약국",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "블리비의원",
+      "count_2024_2026": 3,
+      "count_2026": 3,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "의료·건강",
+        "minor": "병원·약국",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "예금결산이자",
+      "count_2024_2026": 3,
+      "count_2026": 3,
+      "consistency": 1.0,
+      "action": {
+        "type": "소득",
+        "major": "소득",
+        "minor": "이자·배당",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "코아이비인후과",
+      "count_2024_2026": 3,
+      "count_2026": 3,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "의료·건강",
+        "minor": "병원·약국",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "예루살렘소아과의원",
+      "count_2024_2026": 10,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "의료·건강",
+        "minor": "병원·약국",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "카카오T일반택시_법인_4",
+      "count_2024_2026": 10,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "택시",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "상암LPG층전소",
+      "count_2024_2026": 8,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "주유",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "코레일유통서울역",
+      "count_2024_2026": 5,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "간식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "민둥산LPG충전소",
+      "count_2024_2026": 4,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "주유",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "만복기사식당",
+      "count_2024_2026": 3,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "외식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "(주)케이비손해보험",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "자동차보험",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "(주)휴네트개발",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "의료·건강",
+        "minor": "건강관리",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "ChatGPT Plus 구독",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "생활용품",
+        "minor": "생활서비스·구독",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "Google",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "여행·여가·문화",
+        "minor": "문화·오락",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "강서자이온누리약국",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "의료·건강",
+        "minor": "병원·약국",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "국경없는의사회",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "관계·경조사",
+        "minor": "기부",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "국민조민욱",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "세금",
+        "minor": "과태료·벌금",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "다인산업 주식회사",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "장보기·집밥재료",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "대원시스템",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "외식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "뚜레쥬르대구본리",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "간식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "리스크테크 (주)",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "주차",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "삼성힐링내과의원",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "의료·건강",
+        "minor": "병원·약국",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "새서울약국",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "의료·건강",
+        "minor": "병원·약국",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "세븐틴코인노래연습장",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "여행·여가·문화",
+        "minor": "문화·오락",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "스타벅스코리아",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "커피·음료",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "실비 보상",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소득",
+        "major": "소득",
+        "minor": "기타",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "야근 외식비 정산송금",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "외식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "어수정국수집",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "외식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "입출금통장 이자",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소득",
+        "major": "소득",
+        "minor": "이자·배당",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "적립 내역",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소득",
+        "major": "소득",
+        "minor": "기타수입·지원금",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "주식회사 티머니",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "택시",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "풀무원푸드앤컬쳐 제이영동광주(하)충전소",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "주유",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "회사 노리밋",
+      "count_2024_2026": 2,
+      "count_2026": 2,
+      "consistency": 1.0,
+      "action": {
+        "type": "소득",
+        "major": "도박·게임",
+        "minor": "홀덤",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "티머니버스",
+      "count_2024_2026": 11,
+      "count_2026": 1,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "대중교통",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "맥도날드등촌DT점",
+      "count_2024_2026": 8,
+      "count_2026": 1,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "외식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "대양가스충전소",
+      "count_2024_2026": 7,
+      "count_2026": 1,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "주유",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "LG U+통신요금 자동이체",
+      "count_2024_2026": 4,
+      "count_2026": 1,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "주거·공과금",
+        "minor": "이동통신",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "주식회사대우개발",
+      "count_2024_2026": 4,
+      "count_2026": 1,
+      "consistency": 1.0,
+      "action": {
+        "type": "소비지출",
+        "major": "의료·건강",
+        "minor": "건강관리",
+        "status": "자동확정"
+      }
+    }
+  ],
+  "stable_amount_specific": [
+    {
+      "merchant": "Apple - 주식회사 카카오페이",
+      "amount": 7500,
+      "count": 8,
+      "action": {
+        "type": "소비지출",
+        "major": "여행·여가·문화",
+        "minor": "문화·오락",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "쿠팡_와우멤버십 - 쿠팡",
+      "amount": 7890,
+      "count": 7,
+      "action": {
+        "type": "소비지출",
+        "major": "생활용품",
+        "minor": "생활서비스·구독",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "쿠팡(쿠페이)",
+      "amount": 4990,
+      "count": 4,
+      "action": {
+        "type": "소비지출",
+        "major": "생활용품",
+        "minor": "생활서비스·구독",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "카카오T대리_카카오페이 - (주)카카오모빌리",
+      "amount": 30000,
+      "count": 3,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "대리운전",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "카카오T대리_카카오페이 - (주)카카오모빌리",
+      "amount": 33000,
+      "count": 3,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "대리운전",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "카카오T대리_카카오페이 - (주)카카오모빌리",
+      "amount": 34000,
+      "count": 3,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "대리운전",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "쿠팡이츠 - 쿠팡",
+      "amount": 12000,
+      "count": 3,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "배달",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "쿠팡이츠 - 쿠팡",
+      "amount": 23000,
+      "count": 3,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "배달",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "GS25S9양천향교역점",
+      "amount": 2100,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "간식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "GS25가양2",
+      "amount": 2500,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "술·사교",
+        "minor": "술·유흥",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "GS25가양2",
+      "amount": 4200,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "간식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "GS25가양2",
+      "amount": 4600,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "간식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "GS25가양2점",
+      "amount": 4500,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "간식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "GS25가양2점",
+      "amount": 6000,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "간식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "GS25월롱산단점",
+      "amount": 4400,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "간식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "네이버페이",
+      "amount": 16900,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "의복·미용",
+        "minor": "미용",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "네이버페이",
+      "amount": 20000,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "의복·미용",
+        "minor": "미용",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "대표_카카오페이_0",
+      "amount": 1500,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "대리운전",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "씨유 강서웨스턴점",
+      "amount": 1300,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "간식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "씨유강서웨스턴점",
+      "amount": 2600,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "간식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "씨유강서웨스턴점",
+      "amount": 5000,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "간식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "씨유강서웨스턴점",
+      "amount": 5500,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "간식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "씨유강서웨스턴점",
+      "amount": 10600,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "간식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "씨유이태원해밀턴점",
+      "amount": 1100,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "간식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "이마트24이태원해밀턴점",
+      "amount": 2200,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "간식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "지에스(GS)25 가양2",
+      "amount": 2400,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "간식",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "카카오T대리_카카오페이 - (주)카카오모빌리",
+      "amount": 26000,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "대리운전",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "카카오T대리_카카오페이 - (주)카카오모빌리",
+      "amount": 37000,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "대리운전",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "카카오T대리_카카오페이 - 주식회사 카카오",
+      "amount": 18000,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "교통·차량",
+        "minor": "대리운전",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "카카오페이→우리은행 이체",
+      "amount": 81581,
+      "count": 2,
+      "action": {
+        "type": "자산이동",
+        "major": "자산이동",
+        "minor": "계좌 간 이체",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "쿠팡_와우멤버십",
+      "amount": 7890,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "생활용품",
+        "minor": "생활서비스·구독",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "쿠팡_쿠페이 - 쿠팡",
+      "amount": 27090,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "생활용품",
+        "minor": "잡화·소모품",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "쿠팡이츠 - 쿠팡",
+      "amount": 11000,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "배달",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "쿠팡이츠 - 쿠팡",
+      "amount": 14000,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "배달",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "쿠팡이츠 - 쿠팡",
+      "amount": 14700,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "배달",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "쿠팡이츠 - 쿠팡",
+      "amount": 15800,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "배달",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "쿠팡이츠 - 쿠팡",
+      "amount": 18400,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "배달",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "쿠팡이츠 - 쿠팡",
+      "amount": 20500,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "배달",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "쿠팡이츠 - 쿠팡",
+      "amount": 22000,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "배달",
+        "status": "자동확정"
+      }
+    },
+    {
+      "merchant": "쿠팡이츠 - 쿠팡",
+      "amount": 25800,
+      "count": 2,
+      "action": {
+        "type": "소비지출",
+        "major": "식비",
+        "minor": "배달",
+        "status": "자동확정"
+      }
+    }
+  ],
+  "ambiguous_merchant_denylist": [
+    "쿠팡_쿠페이",
+    "카카오페이 미매칭 이체",
+    "편의점",
+    "일반 PG사"
+  ],
+  "settlement_matching": {
+    "window_days": 7,
+    "auto_score_threshold": 82,
+    "review_score_threshold": 62,
+    "prefer_previous_or_same_day": true,
+    "supports_one_to_many": true,
+    "supports_many_to_one": true
+  }
+}
