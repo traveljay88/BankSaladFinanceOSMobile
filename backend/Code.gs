@@ -18,7 +18,7 @@ function doPost(e) {
   try {
     const body = JSON.parse((e.postData && e.postData.contents) || '{}');
     verifySecret_(body.secret || '');
-    if (body.action === 'health') return json_({ok:true, message:'Finance OS Mobile backend ready', backendVersion:'0.3.0', policyVersion:'2.0.0'});
+    if (body.action === 'health') return json_({ok:true, message:'Finance OS Mobile backend ready', backendVersion:'0.4.0', policyVersion:'2.1.0'});
     if (body.action !== 'import') throw new Error('Unsupported action');
     return json_(importFinanceOs_(body));
   } catch (err) {
@@ -279,3 +279,4 @@ function normalizeSheetValue_(v) {
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
+
