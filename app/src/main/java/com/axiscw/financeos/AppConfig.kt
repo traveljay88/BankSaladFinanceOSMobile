@@ -19,6 +19,7 @@ class AppConfig private constructor(
     val loanRules: List<LoanRule>,
     val sourceKeyOverrides: JSONObject,
     val learnedRules: List<JSONObject>,
+    val patternRules: JSONObject,
     val cashSections: Set<String>,
     val cashExtraProducts: Set<String>,
     val investmentExcludeProducts: Set<String>,
@@ -38,6 +39,10 @@ class AppConfig private constructor(
             val policyFile = cfg.optString("policy_file", "finance_policy.json")
             val policyRaw = JSONObject(context.assets.open(policyFile).bufferedReader().use { it.readText() })
             val financePolicy = FinancePolicy.from(policyRaw)
+            val patternRules = try {
+                JSONObject(context.assets.open("ledger_pattern_rules_v2.json").bufferedReader().use { it.readText() })
+            } catch (_: Exception) { JSONObject() }
+
             val overrides = JSONObject()
             copyObject(corrections.optJSONObject("source_key_overrides"), overrides)
             copyObject(state.localCorrections(), overrides)
@@ -102,6 +107,7 @@ class AppConfig private constructor(
                 loanRules = loans,
                 sourceKeyOverrides = overrides,
                 learnedRules = learned,
+                patternRules = patternRules,
                 cashSections = jsonStringSet(snap.getJSONArray("finance_cash_sections")),
                 cashExtraProducts = jsonStringSet(snap.getJSONArray("finance_cash_extra_products")),
                 investmentExcludeProducts = jsonStringSet(snap.getJSONArray("finance_investment_exclude_products")),
