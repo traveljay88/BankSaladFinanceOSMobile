@@ -17,7 +17,7 @@ class BankSaladTransactionExtractor(private val file: File, private val sourceFi
         return PreparedImport(
             sourceFile = sourceFile,
             sourceHash = sha256(file),
-            requestId = UUID.randomUUID().toString(),
+            requestId = sha256(file),
             periodStart = transactions.minOf { it.date },
             periodEnd = transactions.maxOf { it.date },
             transactions = transactions
