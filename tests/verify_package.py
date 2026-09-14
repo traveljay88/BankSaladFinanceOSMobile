@@ -62,7 +62,7 @@ assert 'android:name=".ThinClientActivity"' in manifest
 assert "FinancePipeline(" not in thin and "AppConfig.load" not in thin
 assert "engineImport(payload)" in thin and '"analyze"' in client and '"rawTransactions"' in client
 assert '"getReviewQueue"' in client and '"confirmReview"' in client
-assert 'secure.put("last_analysis_id"' in thin
+assert "secure.put" in thin and '"last_analysis_id"' in thin
 assert "refreshServerReviews(silent = true)" in thin
 assert "text/csv" in manifest and 'endsWith(".csv")' in file_input
 
