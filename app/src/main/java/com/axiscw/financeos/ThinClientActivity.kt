@@ -101,7 +101,7 @@ class ThinClientActivity : Activity() {
         if (url.isBlank() || secret.isBlank()) return toast("Apps Script URL과 APP_SECRET을 설정하세요.")
         uploadButton.isEnabled = false; retryButton.isEnabled = false; summary.text = "서버 처리 중…"
         Thread {
-            try { val response = BackendClient(url, secret).engineImport(payload); runOnUiThread { renderImportResult(response); retryButton.isEnabled = true; refreshServerReviews(silent = true) } }
+            try { val response = BackendClient(url, secret).engineImport(payload); runOnUiThread { secure.put("last_analysis_id", response.optString("analysisId")); renderImportResult(response); retryButton.isEnabled = true; refreshServerReviews(silent = true) } }
             catch (e: Exception) { runOnUiThread { summary.text = "업로드 실패\n다시 시도할 수 있습니다."; retryButton.isEnabled = true; log("업로드 오류: ${e.message}"); toast("업로드 실패") } }
         }.start()
     }
@@ -113,8 +113,8 @@ class ThinClientActivity : Activity() {
     }
 
     private fun refreshServerReviews(silent: Boolean = false) {
-        val url = endpoint.text.toString().trim(); val secret = backendSecret.text.toString(); if (url.isBlank() || secret.isBlank()) return
-        Thread { try { val items = BackendClient(url, secret).reviews().optJSONArray("items") ?: JSONArray(); runOnUiThread { renderServerReviews(items); if (!silent) log("서버 검토 ${items.length()}건을 불러왔습니다.") } } catch (e: Exception) { if (!silent) runOnUiThread { log("검토 큐 조회 실패: ${e.message}"); toast("검토 큐 조회 실패") } } }.start()
+        val url = endpoint.text.toString().trim(); val secret = backendSecret.text.toString(); val analysisId = secure.get("last_analysis_id")
+        if (url.isBlank() || secret.isBlank() || analysisId.isBlank()) return; Thread { try { val items = BackendClient(url, secret).reviews(analysisId).optJSONArray("items") ?: JSONArray(); runOnUiThread { renderServerReviews(items); if (!silent) log("서버 검토 ${items.length()}건을 불러왔습니다.") } } catch (e: Exception) { if (!silent) runOnUiThread { log("검토 큐 조회 실패: ${e.message}"); toast("검토 큐 조회 실패") } } }.start()
     }
 
     private fun renderServerReviews(items: JSONArray) {
