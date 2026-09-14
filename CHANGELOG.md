@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.4.0 — Android Thin Client (2026-09-14)
+
+- 앱 시작 화면을 server-driven `ThinClientActivity`로 전환.
+- ZIP/XLSX/CSV 원본 거래 추출 및 `engine_import` 전송 추가.
+- Android 분류·중복·정산·원장 매핑을 새 경로에서 제거.
+- 서버 Review Queue 자동 복원, 서버 추천 선택 전송, CATEGORY의 좁은 가맹점 학습 선택 추가.
+- Share Intent의 수신 MIME type을 ZIP/XLSX/CSV로 제한.
+- 기존 `MainActivity` 및 `FinancePipeline`은 회귀 복구용으로 유지.
+
+> 이 버전은 Apps Script의 `engine_import`, `reviews`, `review_resolve` 계약을 필요로 한다. Apps Script 배포는 별도 작업이다.
+
 ## v0.3.0 — Finance Policy Engine (2026-09-09)
 
 - Notion 최신 Finance 원칙을 `finance_policy.json`/`FinancePolicy.kt`로 통합.

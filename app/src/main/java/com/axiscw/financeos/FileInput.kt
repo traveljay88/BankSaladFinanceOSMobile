@@ -23,9 +23,9 @@ object FileInput {
         context.contentResolver.openInputStream(uri)?.use { src -> input.outputStream().use { src.copyTo(it) } }
             ?: error("선택한 파일을 읽을 수 없습니다.")
         return when {
-            name.lowercase().endsWith(".xlsx") -> input to name
+            name.lowercase().endsWith(".xlsx") || name.lowercase().endsWith(".csv") -> input to name
             name.lowercase().endsWith(".zip") -> extractXlsx(context, input, password) to name
-            else -> error("BankSalad ZIP 또는 XLSX 파일을 선택하세요.")
+            else -> error("BankSalad ZIP, XLSX 또는 CSV 파일을 선택하세요.")
         }
     }
 

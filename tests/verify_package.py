@@ -43,6 +43,11 @@ for key, pair in expected.items():
     assert action["status"] == "확정"
 
 main = (ROOT / "app/src/main/java/com/axiscw/financeos/MainActivity.kt").read_text(encoding="utf-8")
+thin = (ROOT / "app/src/main/java/com/axiscw/financeos/ThinClientActivity.kt").read_text(encoding="utf-8")
+extractor = (ROOT / "app/src/main/java/com/axiscw/financeos/BankSaladTransactionExtractor.kt").read_text(encoding="utf-8")
+file_input = (ROOT / "app/src/main/java/com/axiscw/financeos/FileInput.kt").read_text(encoding="utf-8")
+client = (ROOT / "app/src/main/java/com/axiscw/financeos/BackendClient.kt").read_text(encoding="utf-8")
+manifest = (ROOT / "app/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
 backend = (ROOT / "backend/Code.gs").read_text(encoding="utf-8")
 build = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/build-apk.yml").read_text(encoding="utf-8")
@@ -52,4 +57,11 @@ assert "reviewCount > 0 || provisionalCount > 0" in backend
 assert "compileSdk = 36" in build and "targetSdk = 36" in build
 assert "platforms;android-36" in workflow
 
-print("PASS: Finance Policy 2.0.0 package invariants")
+# v0.4 must launch the server-driven client and keep policy decisions off-device.
+assert 'android:name=".ThinClientActivity"' in manifest
+assert "FinancePipeline(" not in thin and "AppConfig.load" not in thin
+assert "engineImport(payload)" in thin and '"engine_import"' in client
+assert "refreshServerReviews(silent = true)" in thin
+assert "text/csv" in manifest and 'endsWith(".csv")' in file_input
+
+print("PASS: Finance Policy 2.0.0 and Thin Client package invariants")

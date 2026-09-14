@@ -4,7 +4,17 @@ BankSalad ZIP/XLSX를 Android에서 직접 파싱해 Finance OS 거래원장·We
 
 ## 핵심 구조
 
-`BankSalad ZIP/XLSX → Android parser → Finance Policy Engine → 검토/잠정 확정 → Apps Script → Google Sheets → (선택) Notion Weekly Snapshot`
+`BankSalad ZIP/XLSX/CSV → Android 원본 행 추출 → Apps Script Finance Engine → Google Sheets / Review Queue`
+
+v0.4 Android는 파일 선택·암호 ZIP 해제·원본 거래 행 추출·HTTPS 전송·결과/검토 표시만 수행합니다. 분류, 중복 제거, 정산, 학습 규칙, 원장 매핑은 Apps Script가 처리합니다.
+
+## Apps Script API 계약
+
+배포된 Apps Script는 다음 action을 제공해야 합니다. 이 저장소의 Android 변경은 서버 코드를 자동 배포하거나 변경하지 않습니다.
+
+- `engine_import`: `sourceFile`, `sourceHash`, `requestId`, `transactions`를 받아 처리 결과와 summary 반환
+- `reviews`: 미처리 서버 Review Queue 반환
+- `review_resolve`: 서버 검토 선택과 선택적 `learnRule` 저장
 
 ## v0.3.0 핵심
 

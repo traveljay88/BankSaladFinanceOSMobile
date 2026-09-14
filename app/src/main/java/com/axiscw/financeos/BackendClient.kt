@@ -6,6 +6,12 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class BackendClient(private val endpoint: String, private val secret: String) {
+    fun engineImport(prepared: PreparedImport): JSONObject = post(JSONObject().apply {
+        put("action", "engine_import"); put("secret", secret)
+        put("sourceFile", prepared.sourceFile); put("sourceHash", prepared.sourceHash); put("requestId", prepared.requestId)
+        put("periodStart", prepared.periodStart); put("periodEnd", prepared.periodEnd); put("transactions", prepared.transactionsJson())
+    })
+
     fun import(result: AnalysisResult): JSONObject {
         require(endpoint.startsWith("https://")) { "Apps Script 배포 URL(https://)을 설정하세요." }
         val payload = JSONObject().apply {
@@ -70,6 +76,30 @@ class BackendClient(private val endpoint: String, private val secret: String) {
         conn.outputStream.use { it.write(payload.toString().toByteArray()) }
         val text = conn.inputStream.bufferedReader().use { it.readText() }
         return JSONObject(text)
+    }
+
+    fun reviews(): JSONObject = post(JSONObject().put("action", "reviews").put("secret", secret))
+
+    fun resolveReview(reviewId: String, action: String, category: JSONObject? = null, learnRule: Boolean = false): JSONObject {
+        val payload = JSONObject().put("action", "review_resolve").put("secret", secret)
+            .put("reviewId", reviewId).put("resolutionAction", action).put("learnRule", learnRule)
+        if (category != null) payload.put("category", category)
+        return post(payload)
+    }
+
+    private fun post(payload: JSONObject): JSONObject {
+        require(endpoint.startsWith("https://")) { "Apps Script 배포 URL(https://)을 설정하세요." }
+        val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"; connectTimeout = 20000; readTimeout = 30000; doOutput = true
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+        }
+        conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+        val code = conn.responseCode
+        val text = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+        if (code !in 200..299) error("Finance OS 서버 오류 HTTP $code: $text")
+        val obj = JSONObject(text)
+        if (!obj.optBoolean("ok", false)) error(obj.optString("error", "Finance OS 서버 요청 실패"))
+        return obj
     }
 
     private fun rowsToJson(rows: List<Map<String, Any?>>): JSONArray {

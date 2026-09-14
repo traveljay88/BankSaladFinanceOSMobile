@@ -7,7 +7,7 @@
         android:icon="@mipmap/ic_launcher"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
-            android:name=".MainActivity"
+            android:name=".ThinClientActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -16,7 +16,9 @@
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="*/*" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+                <data android:mimeType="text/csv" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -24,6 +26,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:mimeType="application/zip" />
                 <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+                <data android:mimeType="text/csv" />
             </intent-filter>
         </activity>
     </application>
