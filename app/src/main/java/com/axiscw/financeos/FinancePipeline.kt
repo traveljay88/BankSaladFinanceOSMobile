@@ -237,8 +237,48 @@ class FinancePipeline(
             val action = exact.optJSONObject("action") ?: exact
             return applyRuleAction(out, t, action, "history:${t.sourceKey.take(8)}")
         }
+        patternAction(out, t)?.let { return it }
         cfg.learnedRules.forEach { rule ->
             if (ruleMatches(t, rule)) return applyRuleAction(out, t, rule.optJSONObject("action") ?: JSONObject(), rule.optString("id", "learned"))
+        }
+        return null
+    }
+
+    private fun patternAction(out: LinkedHashMap<String, Any?>, t: Txn): LinkedHashMap<String, Any?>? {
+        val rules = cfg.patternRules
+        val amount = abs(t.signedAmount)
+        fun actionFor(entry: JSONObject): JSONObject? = entry.optJSONObject("action")
+        fun merchantMatches(entry: JSONObject): Boolean = t.content == entry.optString("merchant")
+
+        rules.optJSONArray("hard_rules")?.let { items ->
+            for (i in 0 until items.length()) {
+                val rule = items.optJSONObject(i) ?: continue
+                val match = rule.optJSONObject("match") ?: continue
+                val expectedContent = match.optString("content_equals")
+                val expectedAmount = if (match.has("amount_abs_equals")) match.optLong("amount_abs_equals") else null
+                if (expectedContent.isNotBlank() && t.content != expectedContent) continue
+                if (expectedAmount != null && amount != expectedAmount) continue
+                val action = actionFor(rule) ?: continue
+                if (action.optString("semantics") != "exclude") {
+                    return applyRuleAction(out, t, action, "pattern:${rule.optString("id", "hard")}")
+                }
+            }
+        }
+        rules.optJSONArray("stable_exact_merchants")?.let { items ->
+            for (i in 0 until items.length()) {
+                val rule = items.optJSONObject(i) ?: continue
+                if (merchantMatches(rule)) {
+                    actionFor(rule)?.let { return applyRuleAction(out, t, it, "pattern:merchant") }
+                }
+            }
+        }
+        rules.optJSONArray("stable_amount_specific")?.let { items ->
+            for (i in 0 until items.length()) {
+                val rule = items.optJSONObject(i) ?: continue
+                if (merchantMatches(rule) && amount == rule.optLong("amount")) {
+                    actionFor(rule)?.let { return applyRuleAction(out, t, it, "pattern:merchant_amount") }
+                }
+            }
         }
         return null
     }
@@ -391,6 +431,7 @@ class FinancePipeline(
         val byIdx = txns.associateBy { it.idx }
         txns.forEach { t ->
             if (t.sourceKey in existingKeys) { skipped++; return@forEach }
+            if (abs(t.signedAmount) == 1L) { skipped++; return@forEach }
             val c = classify(t)
             var detail = "BankSalad 모바일 | $sourceFile | ${t.date} ${t.time} | ${t.rawType}>${t.rawMajor}>${t.rawMinor} | 결제수단:${t.payment} | 원금액:${t.signedAmount}"
             val note = c["note"]?.toString().orEmpty()
