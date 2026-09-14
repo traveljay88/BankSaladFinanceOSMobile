@@ -1,15 +1,19 @@
 package com.axiscw.financeos
 
-import org.json.JSONArray
-import org.json.JSONObject
+import org.json.JSONArrayimport org.json.JSONObject
 import java.net.HttpURLConnection
-import java.net.URL
+import java.net.SocketTimeoutExceptionimport java.net.URL
 
 class BackendClient(private val endpoint: String, private val secret: String) {
+    companion object { const val UPLOAD_READ_TIMEOUT_MS = 180_000 }
+
     fun engineImport(prepared: PreparedImport): JSONObject {
         val analysis = post(JSONObject().apply {
             put("action", "analyze"); put("secret", secret)
-            put("sourceFile", prepared.sourceFile); put("rawTransactions", prepared.transactionsJson())
+            put("sourceFile", prepared.sourceFile)
+            put("sourceHash", prepared.sourceHash)
+            put("requestId", prepared.requestId)
+            put("rawTransactions", prepared.transactionsJson())
         })
         val analysisId = analysis.getString("analysisId")
         val commit = if (analysis.optBoolean("canCommit", false)) post(JSONObject().put("action", "commit").put("secret", secret).put("analysisId", analysisId)) else null
@@ -64,9 +68,9 @@ class BackendClient(private val endpoint: String, private val secret: String) {
         return resolved
     }
 
-    private fun post(payload: JSONObject): JSONObject {
+    private fun post(payload: JSONObject, readTimeoutMs: Int = UPLOAD_READ_TIMEOUT_MS): JSONObject {
         require(endpoint.startsWith("https://")) { "Apps Script 배포 URL(https://)을 설정하세요." }
-        val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply { requestMethod = "POST"; connectTimeout = 20000; readTimeout = 30000; doOutput = true; setRequestProperty("Content-Type", "application/json; charset=utf-8") }
+        val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply { requestMethod = "POST"; connectTimeout = 20_000; readTimeout = readTimeoutMs; doOutput = true; setRequestProperty("Content-Type", "application/json; charset=utf-8") }
         conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
         val code = conn.responseCode; val text = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
         if (code !in 200..299) error("Finance OS 서버 오류 HTTP $code: $text")
