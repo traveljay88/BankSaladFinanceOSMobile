@@ -21,31 +21,62 @@ class BackendClient(private val endpoint: String, private val secret: String) {
     /** Adapts the mobile client to the deployed Server Brain protocol. */
     fun engineImport(prepared: PreparedImport): JSONObject = try {
         val analysis = post(JSONObject().apply {
-            put("action", "analyze"); put("secret", secret)
+            put("action", "analyze")
+            put("secret", secret)
             put("sourceFile", prepared.sourceFile)
-            // These are harmless to older Server Brain deployments and enable
-            // idempotent handling as soon as the server supports them.
             put("sourceHash", prepared.sourceHash)
             put("requestId", prepared.requestId)
             put("rawTransactions", prepared.transactionsJson())
         }, UPLOAD_READ_TIMEOUT_MS)
+
         val analysisId = analysis.getString("analysisId")
+
         val commit = if (analysis.optBoolean("canCommit", false)) {
-            post(JSONObject().put("action", "commit").put("secret", secret).put("analysisId", analysisId), UPLOAD_READ_TIMEOUT_MS)
-        } else null
+            post(
+                JSONObject()
+                    .put("action", "commit")
+                    .put("secret", secret)
+                    .put("analysisId", analysisId),
+                UPLOAD_READ_TIMEOUT_MS
+            )
+        } else {
+            null
+        }
+
         val source = analysis.optJSONObject("summary") ?: JSONObject()
+
+        val total = source.optInt("sourceTransactions")
+        val duplicates = source.optInt("duplicate")
+        val excluded = source.optInt("autoExcluded")
+        val autoConfirmed = source.optInt("autoConfirmed")
+        val reviewRequired = source.optInt("review")
+        val accounted = duplicates + excluded + autoConfirmed + reviewRequired
+        val unaccounted = total - accounted
+        val conservationOk = unaccounted == 0
+
         JSONObject().apply {
-            put("ok", true); put("analysisId", analysisId)
-            put("status", if (commit == null) "REVIEW_REQUIRED" else "SUCCESS")
+            put("ok", conservationOk)
+            put("analysisId", analysisId)
+            put(
+                "status",
+                when {
+                    !conservationOk -> "INCOMPLETE"
+                    commit == null -> "REVIEW_REQUIRED"
+                    else -> "SUCCESS"
+                }
+            )
             put("engineVersion", analysis.optString("backendVersion", "-"))
+            put("uiSchema", analysis.optJSONObject("uiSchema") ?: JSONObject())
             put("summary", JSONObject().apply {
-                put("total", source.optInt("sourceTransactions"))
+                put("total", total)
+                put("autoConfirmed", autoConfirmed)
                 put("inserted", commit?.optInt("ledgerInserted") ?: 0)
-                put("duplicates", source.optInt("duplicate"))
-                put("excluded", source.optInt("autoExcluded"))
+                put("duplicates", duplicates)
+                put("excluded", excluded)
                 put("settlementMatched", source.optInt("settlementMatched"))
-                put("reviewRequired", source.optInt("review"))
-                put("failed", 0)
+                put("reviewRequired", reviewRequired)
+                put("unaccounted", unaccounted)
+                put("failed", if (conservationOk) 0 else kotlin.math.abs(unaccounted))
             })
         }
     } catch (e: SocketTimeoutException) {
@@ -53,7 +84,10 @@ class BackendClient(private val endpoint: String, private val secret: String) {
     }
 
     fun import(result: AnalysisResult): JSONObject {
-        require(endpoint.startsWith("https://")) { "Apps Script 배포 URL(https://)을 설정하세요." }
+        require(endpoint.startsWith("https://")) {
+            "Apps Script 배포 URL(https://)을 설정하세요."
+        }
+
         val payload = JSONObject().apply {
             put("action", "import")
             put("secret", secret)
@@ -90,90 +124,234 @@ class BackendClient(private val endpoint: String, private val secret: String) {
                 put("recognizedInterest", result.recognizedInterest())
             })
         }
+
         val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
-            connectTimeout = 20000
-            readTimeout = 30000
+            connectTimeout = 20_000
+            readTimeout = 30_000
             doOutput = true
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
         }
-        conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+
+        conn.outputStream.use {
+            it.write(payload.toString().toByteArray(Charsets.UTF_8))
+        }
+
         val code = conn.responseCode
         val stream = if (code in 200..299) conn.inputStream else conn.errorStream
         val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-        if (code !in 200..299) error("Finance OS 서버 오류 HTTP $code: $text")
+
+        if (code !in 200..299) {
+            error("Finance OS 서버 오류 HTTP $code: $text")
+        }
+
         val obj = JSONObject(text)
-        if (!obj.optBoolean("ok", false)) error(obj.optString("error", "Finance OS 반영 실패"))
+        if (!obj.optBoolean("ok", false)) {
+            error(obj.optString("error", "Finance OS 반영 실패"))
+        }
         return obj
     }
 
     fun health(): JSONObject {
-        val payload = JSONObject().put("action", "health").put("secret", secret)
+        val payload = JSONObject()
+            .put("action", "health")
+            .put("secret", secret)
+
         val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"; connectTimeout = 12000; readTimeout = 12000; doOutput = true
+            requestMethod = "POST"
+            connectTimeout = 12_000
+            readTimeout = 12_000
+            doOutput = true
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
         }
-        conn.outputStream.use { it.write(payload.toString().toByteArray()) }
-        val text = conn.inputStream.bufferedReader().use { it.readText() }
-        return JSONObject(text)
+
+        conn.outputStream.use {
+            it.write(payload.toString().toByteArray(Charsets.UTF_8))
+        }
+
+        val code = conn.responseCode
+        val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+            ?.bufferedReader()
+            ?.use { it.readText() }
+            .orEmpty()
+
+        if (code !in 200..299) {
+            error("Finance OS 서버 오류 HTTP $code: $text")
+        }
+
+        val obj = JSONObject(text)
+        if (!obj.optBoolean("ok", false)) {
+            error(obj.optString("error", "Finance OS 서버 연결 실패"))
+        }
+        return obj
     }
 
     fun reviews(analysisId: String): JSONObject {
-        val response = post(JSONObject().put("action", "getReviewQueue").put("secret", secret).put("analysisId", analysisId))
+        val response = post(
+            JSONObject()
+                .put("action", "getReviewQueue")
+                .put("secret", secret)
+                .put("analysisId", analysisId)
+        )
+
         val source = response.optJSONArray("reviewQueue") ?: JSONArray()
-        return JSONObject().put("items", JSONArray().apply {
-            for (i in 0 until source.length()) {
-                val review = source.getJSONObject(i)
-                val settlement = review.optString("reviewType") == "SETTLEMENT_LINK"
-                val recommendation = review.optJSONObject("recommendation") ?: JSONObject()
-                put(JSONObject().apply {
-                    put("id", review.optString("reviewId"))
-                    put("reviewType", if (settlement) "SETTLEMENT" else "CATEGORY")
-                    put("transaction", JSONObject().apply {
-                        put("date", review.optString("date")); put("merchant", review.optString("merchant"))
-                        put("signedAmount", if (settlement) review.optLong("amount") else -review.optLong("amount"))
-                    })
-                    put("reason", review.optString("reason"))
-                    put("suggestions", JSONArray().apply {
-                        if (settlement) {
-                            put(JSONObject().put("action", "confirm_match").put("label", "추천 정산 연결 확정"))
-                            put(JSONObject().put("action", "keep_unmatched").put("label", "정산은 맞지만 연결 안 함"))
-                        } else {
-                            put(JSONObject().put("action", "confirm").put("label", "추천 분류 확정").put("category", JSONObject().apply {
-                                put("type", recommendation.optString("type")); put("major", recommendation.optString("major")); put("minor", recommendation.optString("minor"))
-                            }))
-                        }
-                    })
+        val uiSchema = response.optJSONObject("uiSchema") ?: JSONObject()
+
+        val items = JSONArray()
+
+        for (i in 0 until source.length()) {
+            val review = source.getJSONObject(i)
+            val settlement = review.optString("reviewType") == "SETTLEMENT_LINK"
+            val recommendation = review.optJSONObject("recommendation") ?: JSONObject()
+
+            val type = recommendation.optString("type").trim()
+            val major = recommendation.optString("major").trim()
+            val minor = recommendation.optString("minor").trim()
+            val recommendationComplete =
+                type.isNotBlank() && major.isNotBlank() && minor.isNotBlank()
+
+            items.put(JSONObject().apply {
+                put("id", review.optString("reviewId"))
+                put("reviewType", if (settlement) "SETTLEMENT" else "CATEGORY")
+
+                put("transaction", JSONObject().apply {
+                    put("date", review.optString("date"))
+                    put("merchant", review.optString("merchant"))
+                    put(
+                        "signedAmount",
+                        if (settlement) review.optLong("amount")
+                        else -review.optLong("amount")
+                    )
                 })
-            }
-        })
+
+                put("reason", review.optString("reason"))
+                put("recommendation", recommendation)
+
+                put("suggestions", JSONArray().apply {
+                    if (settlement) {
+                        put(
+                            JSONObject()
+                                .put("action", "confirm_match")
+                                .put("label", "추천 정산 연결 확정")
+                        )
+                        put(
+                            JSONObject()
+                                .put("action", "keep_unmatched")
+                                .put("label", "정산은 맞지만 연결 안 함")
+                        )
+                    } else if (recommendationComplete) {
+                        put(
+                            JSONObject()
+                                .put("action", "confirm")
+                                .put("label", "추천 분류 확정")
+                                .put(
+                                    "category",
+                                    JSONObject()
+                                        .put("type", type)
+                                        .put("major", major)
+                                        .put("minor", minor)
+                                )
+                        )
+                    } else {
+                        put(
+                            JSONObject()
+                                .put("action", "select")
+                                .put("label", "분류 선택")
+                        )
+                    }
+                })
+            })
+        }
+
+        return JSONObject()
+            .put("items", items)
+            .put("uiSchema", uiSchema)
+            .put("reviewCount", response.optInt("reviewCount", items.length()))
+            .put("canCommit", response.optBoolean("canCommit", false))
     }
 
-    fun resolveReview(reviewId: String, action: String, category: JSONObject? = null, learnRule: Boolean = false): JSONObject {
-        val payload = JSONObject().put("action", "confirmReview").put("secret", secret)
-            .put("reviewId", reviewId).put("reviewAction", action).put("learnPattern", learnRule)
+    fun resolveReview(
+        reviewId: String,
+        action: String,
+        category: JSONObject? = null,
+        learnRule: Boolean = false
+    ): JSONObject {
+        require(reviewId.isNotBlank()) { "reviewId is required" }
+
+        if (action == "confirm") {
+            require(category != null) { "분류 선택이 필요합니다." }
+
+            val type = category.optString("type").trim()
+            val major = category.optString("major").trim()
+            val minor = category.optString("minor").trim()
+
+            require(type.isNotBlank() && major.isNotBlank() && minor.isNotBlank()) {
+                "type / major / minor are required"
+            }
+        }
+
+        val payload = JSONObject()
+            .put("action", "confirmReview")
+            .put("secret", secret)
+            .put("reviewId", reviewId)
+            .put("reviewAction", action)
+            .put("learnPattern", learnRule)
+
         if (category != null) {
-            payload.put("type", category.optString("type")); payload.put("major", category.optString("major")); payload.put("minor", category.optString("minor"))
+            payload.put("type", category.optString("type").trim())
+            payload.put("major", category.optString("major").trim())
+            payload.put("minor", category.optString("minor").trim())
         }
+
         val resolved = post(payload)
+
         if (resolved.optBoolean("canCommit", false)) {
-            post(JSONObject().put("action", "commit").put("secret", secret).put("analysisId", resolved.getString("analysisId")))
+            post(
+                JSONObject()
+                    .put("action", "commit")
+                    .put("secret", secret)
+                    .put("analysisId", resolved.getString("analysisId"))
+            )
         }
+
         return resolved
     }
 
-    private fun post(payload: JSONObject, readTimeoutMs: Int = 30_000): JSONObject {
-        require(endpoint.startsWith("https://")) { "Apps Script 배포 URL(https://)을 설정하세요." }
+    private fun post(
+        payload: JSONObject,
+        readTimeoutMs: Int = 30_000
+    ): JSONObject {
+        require(endpoint.startsWith("https://")) {
+            "Apps Script 배포 URL(https://)을 설정하세요."
+        }
+
         val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"; connectTimeout = 20_000; readTimeout = readTimeoutMs; doOutput = true
+            requestMethod = "POST"
+            connectTimeout = 20_000
+            readTimeout = readTimeoutMs
+            doOutput = true
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
         }
-        conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+
+        conn.outputStream.use {
+            it.write(payload.toString().toByteArray(Charsets.UTF_8))
+        }
+
         val code = conn.responseCode
-        val text = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
-        if (code !in 200..299) error("Finance OS 서버 오류 HTTP $code: $text")
+        val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+            ?.bufferedReader()
+            ?.use { it.readText() }
+            .orEmpty()
+
+        if (code !in 200..299) {
+            error("Finance OS 서버 오류 HTTP $code: $text")
+        }
+
         val obj = JSONObject(text)
-        if (!obj.optBoolean("ok", false)) error(obj.optString("error", "Finance OS 서버 요청 실패"))
+        if (!obj.optBoolean("ok", false)) {
+            error(obj.optString("error", "Finance OS 서버 요청 실패"))
+        }
+
         return obj
     }
 
@@ -181,7 +359,9 @@ class BackendClient(private val endpoint: String, private val secret: String) {
         val arr = JSONArray()
         rows.forEach { row ->
             val o = JSONObject()
-            row.forEach { (k, v) -> o.put(k, v ?: JSONObject.NULL) }
+            row.forEach { (k, v) ->
+                o.put(k, v ?: JSONObject.NULL)
+            }
             arr.put(o)
         }
         return arr
