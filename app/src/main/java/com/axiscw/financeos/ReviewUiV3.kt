@@ -1,4 +1,4 @@
-package com.financeos.banksalad
+package com.axiscw.financeos
 
 import android.app.AlertDialog
 import android.content.Context
