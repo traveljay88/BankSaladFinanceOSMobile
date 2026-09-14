@@ -1,4 +1,4 @@
-package com.financeos.banksalad
+package com.axiscw.financeos
 
 /**
  * Pure Kotlin contract helpers for Review UI v3.
