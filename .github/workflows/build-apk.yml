@@ -21,7 +21,8 @@ jobs:
       - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '9.3.0'
+          # AGP in this project requires Gradle 9.6 or newer.
+          gradle-version: '9.6.0'
       - name: Install Android SDK platform
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
       - name: Verify source package
@@ -30,7 +31,7 @@ jobs:
         run: gradle :app:assembleDebug --no-daemon
       - uses: actions/upload-artifact@v4
         with:
-          name: BankSaladFinanceOSMobile-v0.4.0-debug-apk
+          name: BankSaladFinanceOSMobile-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Publish release APK

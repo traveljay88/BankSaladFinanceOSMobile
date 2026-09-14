@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.1 — Build Compatibility (2026-09-14)
+
+- Align GitHub Actions with the Android Gradle Plugin requirement: Gradle 9.6.0.
+
 ## v0.4.0 — Android Thin Client (2026-09-14)
 
 - 앱 시작 화면을 server-driven `ThinClientActivity`로 전환.
