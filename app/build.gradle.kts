@@ -10,8 +10,8 @@ android {
         applicationId = "com.axiscw.financeos"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.4.3"
+        versionCode = 9
+        versionName = "0.5.3"
     }
 
     buildFeatures {
@@ -20,5 +20,6 @@ android {
 }
 
 dependencies {
+    implementation("androidx.work:work-runtime-ktx:2.10.5")
     implementation("net.lingala.zip4j:zip4j:2.11.6")
 }
