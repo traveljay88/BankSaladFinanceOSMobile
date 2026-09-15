@@ -1,0 +1,305 @@
+--- Finance_OS_Server_Brain_v1.5.1_COMPLETE.txt
++++ Finance_OS_Server_Brain_v1.5.2_COMPLETE.txt
+@@ -1,15 +1,16 @@
+ /**********************************************************************
+- * FINANCE OS SERVER BRAIN v1.5.1 TOUCH-MINIMIZED UX/SETTLEMENT
++ * FINANCE OS SERVER BRAIN v1.5.2 APPEND/DEDUP/HISTORY UX
+  * Consolidated replacement source. No duplicate top-level function names.
+  * Base + RR1 + CI1 + CI2 + QUICKBOOT + PERFORMANCE + PERSONAL SETTLEMENT POLICY.
+  * Generated 2026-09-15.
+  * User policy: outgoing KakaoPay = shared-meal/drink repayment recommendation;
+  * incoming KakaoPay = settlement recovery + expense netting; Coupang = per transaction.
++ * v1.5.2: lock-safe canonical append support, stable dedup guard, nearest-history review recommendations.
+  **********************************************************************/
+ 
+ /**********************************************************************
+  * COMPLETE REPLACEMENT SOURCE
+- * FINANCE OS · BANKSALAD SERVER BRAIN v1.5.1
++ * FINANCE OS · BANKSALAD SERVER BRAIN v1.5.2
+@@
+-const BACKEND_VERSION = '1.5.1';
+-const POLICY_VERSION = '3.5.1';
++const BACKEND_VERSION = '1.5.2';
++const POLICY_VERSION = '3.5.2';
+ const PROTOCOL_VERSION = 1;
+@@
+   const analysisId = 'AN-' + Utilities.getUuid();
+   const normalized = rawInput.map(function (r, i) { return normalizeRawTransaction_(r, i); });
+   const existingKeys = existingLedgerKeys_();
++  const existingStableKeys = existingRawStableKeys_();
+ 
+   // 1) Existing canonical duplicates.
++  // Exact canonical key is authoritative. A conservative stable raw fingerprint
++  // is a second guard for re-exports where memo/category text changed.
+   normalized.forEach(function (tx) {
+     if (existingKeys.has(tx.sourceKey)) {
+       tx.preStatus = 'DUPLICATE';
+       tx.preReason = '기존 Finance OS 중복키';
++    } else if (tx.stableDedupKey && existingStableKeys.has(tx.stableDedupKey)) {
++      tx.preStatus = 'DUPLICATE';
++      tx.preReason = '기존 BankSalad 원본 안정지문 중복';
+     }
+   });
+@@
+   const sourceKey = buildSourceKey_({
+     date: date,
+     time: time,
+     rawType: rawType,
+     merchant: merchant,
+     signedAmount: signedAmount,
+     payment: payment,
+     memo: memo
+   });
++  const stableDedupKey = buildStableDedupKey_({
++    date: date,
++    time: time,
++    rawType: rawType,
++    merchant: merchant,
++    signedAmount: signedAmount,
++    payment: payment,
++    account: account
++  });
+@@
+     account: account,
+     sourceKey: sourceKey,
++    stableDedupKey: stableDedupKey,
+     pairSourceKey: '',
+@@
+ function buildSourceKey_(x) {
+   const raw = [x.date, x.time, x.rawType, x.merchant, x.signedAmount, x.payment, x.memo].join('|');
+   const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, raw, Utilities.Charset.UTF_8);
+   return bytes.map(function (b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join('').slice(0, 32);
+ }
+ 
++// Conservative second-line duplicate key. Require a usable time so same-day
++// legitimate repeated purchases are not collapsed merely by merchant + amount.
++// Memo and BankSalad category labels are intentionally excluded because those
++// can change between exports while the underlying transaction is the same.
++function buildStableDedupKey_(x) {
++  const date = dateKey_(x && x.date);
++  const time = normalizeTime_(x && x.time);
++  const merchant = normalizeMerchant_(x && x.merchant);
++  const amount = numberSigned_(x && x.signedAmount);
++  if (!date || !time || time === '00:00:00' || !merchant || !amount) return '';
++
++  const raw = [
++    date,
++    time,
++    text_(x && x.rawType).toLowerCase(),
++    merchant,
++    amount,
++    normalizeAccountName_(text_(x && (x.payment || x.account)))
++  ].join('|');
++
++  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, raw, Utilities.Charset.UTF_8);
++  return bytes.map(function (b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join('').slice(0, 32);
++}
++
+ function markIntraRunDuplicates_(txns) {
+-  const seen = new Set();
++  const seenSource = new Set();
++  const seenStable = new Set();
+   txns.forEach(function (tx) {
+     if (tx.preStatus) return;
+     if (!tx.sourceKey) return;
+-    if (seen.has(tx.sourceKey)) {
++    if (seenSource.has(tx.sourceKey)) {
+       tx.preStatus = 'DUPLICATE';
+       tx.preReason = '동일 분석 payload 내 중복 sourceKey';
+       return;
+     }
+-    seen.add(tx.sourceKey);
++    if (tx.stableDedupKey && seenStable.has(tx.stableDedupKey)) {
++      tx.preStatus = 'DUPLICATE';
++      tx.preReason = '동일 분석 payload 내 안정지문 중복';
++      return;
++    }
++    seenSource.add(tx.sourceKey);
++    if (tx.stableDedupKey) seenStable.add(tx.stableDedupKey);
+   });
+ }
+@@
+   results.forEach(function (r, i) {
+     if (r.status !== 'REVIEW') return;
+     const tx = txns[i];
++    const history = historicalReviewSuggestions_(tx, context, 3);
++    const topHistory = history.length ? history[0] : null;
++
++    let recommendedType = r.type;
++    let recommendedMajor = r.major;
++    let recommendedMinor = r.minor;
++    let confidence = r.confidence;
++    let reason = r.reason;
++
++    if (
++      topHistory &&
++      (!hasCompleteClassification_(r) || number_(topHistory.score, 0) > number_(r.confidence, 0))
++    ) {
++      recommendedType = topHistory.type;
++      recommendedMajor = topHistory.major;
++      recommendedMinor = topHistory.minor;
++      confidence = topHistory.score;
++      reason += ' / 과거근접 ' + topHistory.date + ' ' + topHistory.merchant +
++        ' ' + topHistory.amount + '원 → ' + topHistory.major + '>' + topHistory.minor +
++        ' (' + topHistory.score + '점)';
++    }
++
++    const effective = {
++      type: recommendedType,
++      major: recommendedMajor,
++      minor: recommendedMinor,
++      confidence: confidence
++    };
+ 
+     reviews.push({
+@@
+-      reason: r.reason,
+-      recommendedType: r.type,
+-      recommendedMajor: r.major,
+-      recommendedMinor: r.minor,
+-      confidence: r.confidence,
++      reason: reason,
++      recommendedType: recommendedType,
++      recommendedMajor: recommendedMajor,
++      recommendedMinor: recommendedMinor,
++      confidence: confidence,
+       matchedSourceKey: '',
+-      options: classificationOptions_(r, tx)
++      options: classificationOptions_(effective, tx, history)
+     });
+   });
+@@
+ function existingLedgerKeys_() {
+@@
+ }
++
++function existingRawStableKeys_() {
++  const sheet = financeSpreadsheet_().getSheetByName(SHEETS.RAW);
++  if (!sheet || sheet.getLastRow() < 2) return new Set();
++
++  const headers = sheetHeaders_(sheet);
++  const idx = {};
++  headers.forEach(function (h, i) { idx[h] = i; });
++  const needed = ['Date','Time','Raw_Type','Merchant','Signed_Amount','Payment','Account'];
++  if (needed.some(function (h) { return idx[h] === undefined; })) return new Set();
++
++  const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, headers.length).getValues();
++  const out = new Set();
++  values.forEach(function (row) {
++    const key = buildStableDedupKey_({
++      date: row[idx.Date],
++      time: row[idx.Time],
++      rawType: row[idx.Raw_Type],
++      merchant: row[idx.Merchant],
++      signedAmount: row[idx.Signed_Amount],
++      payment: row[idx.Payment],
++      account: row[idx.Account]
++    });
++    if (key) out.add(key);
++  });
++  return out;
++}
+@@
+-function appendObjectsByExistingHeaders_(sheet, objects) {
++function canonicalLedgerLastDataRow_(sheet) {
++  if (!sheet) return 1;
++  const headers = sheetHeaders_(sheet);
++  let keyCol = headers.indexOf('중복키');
++  if (keyCol < 0) keyCol = headers.indexOf('거래ID');
++  if (keyCol < 0) return Math.max(1, sheet.getLastRow());
++  const upper = Math.max(1, sheet.getLastRow());
++  if (upper < 2) return 1;
++  const values = sheet.getRange(2, keyCol + 1, upper - 1, 1).getDisplayValues();
++  for (let i = values.length - 1; i >= 0; i--) {
++    if (text_(values[i][0])) return i + 2;
++  }
++  return 1;
++}
++
++function appendObjectsByExistingHeaders_(sheet, objects) {
+   if (!objects || !objects.length) return;
+   const headers = sheetHeaders_(sheet);
+@@
+-  sheet.getRange(sheet.getLastRow() + 1, 1, values.length, headers.length).setValues(values);
++  const targetRow = sheet.getName() === SHEETS.LEDGER
++    ? canonicalLedgerLastDataRow_(sheet) + 1
++    : sheet.getLastRow() + 1;
++  sheet.getRange(targetRow, 1, values.length, headers.length).setValues(values);
+ }
+@@
+-function classificationOptions_(result, tx) {
++function loadConfirmedLedgerHistoryTail_(maxRows) {
++  const sheet = financeSpreadsheet_().getSheetByName(SHEETS.LEDGER);
++  if (!sheet) return [];
++  const lastRow = canonicalLedgerLastDataRow_(sheet);
++  if (lastRow < 2) return [];
++  const headers = sheetHeaders_(sheet);
++  const count = Math.min(Math.max(1, number_(maxRows, 5000)), lastRow - 1);
++  const startRow = lastRow - count + 1;
++  const values = sheet.getRange(startRow, 1, count, headers.length).getValues();
++  return values.map(function (row) {
++    const o = {};
++    headers.forEach(function (h, i) { if (h) o[h] = row[i]; });
++    return o;
++  }).filter(function (r) {
++    return text_(r['검토상태']) === '확정' && text_(r['거래명']) && text_(r['대분류']) && text_(r['소분류']);
++  });
++}
++
++function historicalReviewSuggestions_(tx, context, limit) {
++  if (!tx || !tx.merchant || !tx.date) return [];
++  if (!context.__reviewHistoryTail) context.__reviewHistoryTail = loadConfirmedLedgerHistoryTail_(5000);
++
++  const merchantKey = normalizeMerchant_(tx.merchant);
++  const paymentKey = normalizeAccountName_(tx.payment || tx.account);
++  const amount = Math.abs(number_(tx.signedAmount, 0));
++  const perTransaction = isPerTransactionMerchant_(tx.merchant);
++  const scored = [];
++
++  context.__reviewHistoryTail.forEach(function (r) {
++    const histMerchant = text_(r['거래명']);
++    if (!histMerchant || normalizeMerchant_(histMerchant) !== merchantKey) return;
++    const type = text_(r['재무거래유형']);
++    const major = text_(r['대분류']);
++    const minor = text_(r['소분류']);
++    if (!type || !major || !minor) return;
++    if (!classificationDirectionCompatible_(tx.signedAmount, type, minor)) return;
++
++    let score = 50;
++    const histPayment = normalizeAccountName_(r['표준계정명']);
++    if (paymentKey && histPayment && paymentKey === histPayment) score += 15;
++    const histAmount = Math.abs(number_(r['금액'], 0));
++    if (amount > 0 && histAmount > 0) {
++      const diffRatio = Math.abs(histAmount - amount) / Math.max(histAmount, amount);
++      if (diffRatio <= 0.001) score += 20;
++      else if (diffRatio <= 0.05) score += 15;
++      else if (diffRatio <= 0.20) score += 8;
++    }
++    const days = Math.abs(dateDiffDays_(dateKey_(r['거래일']), tx.date));
++    if (days <= 7) score += 15;
++    else if (days <= 30) score += 12;
++    else if (days <= 90) score += 8;
++    else if (days <= 365) score += 4;
++    if (perTransaction) score = Math.min(score, 88);
++
++    scored.push({
++      sourceKey: text_(r['중복키']), date: dateKey_(r['거래일']), merchant: histMerchant,
++      amount: histAmount, payment: text_(r['표준계정명']), type: type, major: major, minor: minor,
++      score: Math.max(0, Math.min(99, Math.round(score)))
++    });
++  });
++
++  scored.sort(function (a, b) {
++    if (b.score !== a.score) return b.score - a.score;
++    return String(b.date).localeCompare(String(a.date));
++  });
++  return scored.slice(0, Math.max(1, number_(limit, 3)));
++}
++
++function classificationOptions_(result, tx, historySuggestions) {
+@@
+-    perTransaction: perTransaction
++    perTransaction: perTransaction,
++    historySuggestions: Array.isArray(historySuggestions) ? historySuggestions : []
+   };
+ }
