@@ -1,13 +1,18 @@
 package com.axiscw.financeos
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.InputType
+import android.util.Log
 import android.view.Gravity
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -16,6 +21,10 @@ import java.util.Locale
 
 /** Server-driven Finance OS client. No local accounting or classification rules. */
 class ThinClientActivity : Activity() {
+    companion object {
+        private const val MAX_UI_LOG_LINES = 8
+    }
+
     private val requestOpen = 1001
 
     private lateinit var secure: SecureStore
@@ -32,6 +41,18 @@ class ThinClientActivity : Activity() {
     private lateinit var uploadButton: Button
     private lateinit var retryButton: Button
     private lateinit var logView: TextView
+    private val uiLogLines = mutableListOf<String>()
+    private var lastCommitStateToken = ""
+
+    private val backgroundHandler = Handler(Looper.getMainLooper())
+    private var lastBackgroundStateToken = ""
+    private val backgroundPoller = object : Runnable {
+        override fun run() {
+            refreshBackgroundUploadState()
+            refreshBackgroundCommitState()
+            backgroundHandler.postDelayed(this, 1500L)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,6 +62,19 @@ class ThinClientActivity : Activity() {
         restoreSettings()
         acceptIntent(intent)
         refreshServerReviews(silent = true)
+        refreshBackgroundUploadState(force = true)
+        refreshBackgroundCommitState(force = true)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        backgroundHandler.removeCallbacks(backgroundPoller)
+        backgroundHandler.post(backgroundPoller)
+    }
+
+    override fun onPause() {
+        backgroundHandler.removeCallbacks(backgroundPoller)
+        super.onPause()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -114,7 +148,9 @@ class ThinClientActivity : Activity() {
         retryButton = Button(this).apply {
             text = "마지막 업로드 재시도"
             isEnabled = false
-            setOnClickListener { uploadPrepared() }
+            setOnClickListener {
+                if (prepared != null) uploadPrepared() else retryBackgroundUpload()
+            }
         }
 
         root.addView(uploadButton, full())
@@ -166,6 +202,7 @@ class ThinClientActivity : Activity() {
                 text = "연결 설정 저장"
                 setOnClickListener {
                     saveSettings()
+                    clearConnectionFocus()
                     toast("설정을 저장했습니다.")
                 }
             },
@@ -180,10 +217,21 @@ class ThinClientActivity : Activity() {
             full()
         )
 
-        root.addView(sectionTitle("실행 로그"))
+        root.addView(sectionTitle("실행 로그 · 최근 8개"))
+
+        root.addView(
+            Button(this).apply {
+                text = "로그 지우기"
+                setOnClickListener {
+                    uiLogLines.clear()
+                    logView.text = "최근 로그 없음"
+                }
+            },
+            full()
+        )
 
         logView = TextView(this).apply {
-            text = "대기 중"
+            text = "최근 로그 없음"
             textSize = 13f
             setTextIsSelectable(true)
             setPadding(dp(10), dp(10), dp(10), dp(10))
@@ -321,7 +369,7 @@ class ThinClientActivity : Activity() {
 
     private fun uploadPrepared() {
         val payload = prepared
-            ?: return toast("먼저 파일을 준비하세요.")
+            ?: return retryBackgroundUpload()
 
         saveSettings()
 
@@ -334,39 +382,125 @@ class ThinClientActivity : Activity() {
 
         uploadButton.isEnabled = false
         retryButton.isEnabled = false
-        summary.text = "서버 처리 중…"
+        summary.text =
+            "백그라운드 서버 처리 예약 중…\n" +
+            "앱을 나가거나 화면을 꺼도 처리가 이어집니다."
 
-        Thread {
-            try {
-                val response =
-                    BackendClient(url, secret).engineImport(payload)
+        try {
+            FinanceUploadWorker.enqueue(this, payload)
+            refreshBackgroundUploadState(force = true)
+            log("백그라운드 업로드를 시작했습니다. 앱을 나가도 계속 처리됩니다.")
+        } catch (e: Exception) {
+            summary.text = "백그라운드 업로드 시작 실패"
+            uploadButton.isEnabled = prepared != null
+            retryButton.isEnabled = true
+            log("백그라운드 업로드 시작 오류: ${e.message}")
+            toast("업로드 시작 실패")
+        }
+    }
 
-                runOnUiThread {
-                    secure.put(
-                        "last_analysis_id",
-                        response.optString("analysisId")
-                    )
+    private fun retryBackgroundUpload() {
+        saveSettings()
 
-                    renderImportResult(response)
+        val url = endpoint.text.toString().trim()
+        val secret = backendSecret.text.toString()
+        if (url.isBlank() || secret.isBlank()) {
+            return toast("Apps Script URL과 APP_SECRET을 설정하세요.")
+        }
 
-                    retryButton.isEnabled = true
-                    uploadButton.isEnabled = true
+        val workId = FinanceUploadWorker.retryLast(this)
+        if (workId == null) {
+            toast("재시도할 백그라운드 업로드가 없습니다.")
+            return
+        }
 
-                    refreshServerReviews(silent = true)
-                }
-            } catch (e: Exception) {
-                runOnUiThread {
-                    summary.text =
-                        "업로드 실패\n다시 시도할 수 있습니다."
+        uploadButton.isEnabled = false
+        retryButton.isEnabled = false
+        summary.text =
+            "백그라운드 업로드 재시도 중…\n" +
+            "앱을 나가거나 화면을 꺼도 처리가 이어집니다."
+        refreshBackgroundUploadState(force = true)
+        log("마지막 백그라운드 업로드를 재시도합니다.")
+    }
 
-                    retryButton.isEnabled = true
-                    uploadButton.isEnabled = true
+    private fun refreshBackgroundUploadState(force: Boolean = false) {
+        val snapshot = FinanceBackgroundUploadState(this).snapshot()
+        val token = "${snapshot.state}|${snapshot.updatedAt}|${snapshot.workId}"
+        if (!force && token == lastBackgroundStateToken) return
+        lastBackgroundStateToken = token
 
-                    log("업로드 오류: ${e.message}")
-                    toast("업로드 실패")
-                }
+        when (snapshot.state) {
+            FinanceBackgroundUploadState.STATE_ENQUEUED -> {
+                summary.text =
+                    "백그라운드 업로드 대기 중…\n" +
+                    "네트워크가 연결되면 시작됩니다. 앱을 나가도 됩니다."
+                uploadButton.isEnabled = false
+                retryButton.isEnabled = false
             }
-        }.start()
+
+            FinanceBackgroundUploadState.STATE_RUNNING -> {
+                summary.text =
+                    "백그라운드 서버 처리 중…\n" +
+                    "앱을 나가거나 화면을 꺼도 계속 처리됩니다."
+                uploadButton.isEnabled = false
+                retryButton.isEnabled = false
+            }
+
+            FinanceBackgroundUploadState.STATE_SUCCESS -> {
+                val response = try {
+                    JSONObject(snapshot.resultJson)
+                } catch (_: Exception) {
+                    JSONObject()
+                }
+
+                if (response.length() > 0) {
+                    val analysisId = response.optString("analysisId")
+                    if (analysisId.isNotBlank()) secure.put("last_analysis_id", analysisId)
+                    renderImportResult(response)
+                    refreshServerReviews(silent = true)
+                } else {
+                    summary.text = "백그라운드 업로드 완료"
+                }
+
+                uploadButton.isEnabled = prepared != null
+                retryButton.isEnabled = prepared != null
+                log("백그라운드 업로드 완료")
+            }
+
+            FinanceBackgroundUploadState.STATE_FAILED -> {
+                summary.text = buildString {
+                    append("백그라운드 업로드 실패\n")
+                    append(snapshot.error.ifBlank { "원인을 확인할 수 없습니다." })
+                    append("\n마지막 업로드 재시도를 누를 수 있습니다.")
+                }
+                uploadButton.isEnabled = prepared != null
+                retryButton.isEnabled = true
+                log("백그라운드 업로드 실패: ${snapshot.error}")
+            }
+        }
+    }
+
+    private fun refreshBackgroundCommitState(force: Boolean = false) {
+        val snapshot = FinanceCommitState(this).snapshot()
+        val token = "${snapshot.state}|${snapshot.updatedAt}|${snapshot.workId}|${snapshot.inserted}|${snapshot.error}"
+        if (!force && token == lastCommitStateToken) return
+        lastCommitStateToken = token
+
+        when (snapshot.state) {
+            FinanceCommitState.STATE_ENQUEUED ->
+                log("원장 반영 예약됨 · 앱을 나가도 계속 처리")
+
+            FinanceCommitState.STATE_RUNNING ->
+                log("원장 반영 중…")
+
+            FinanceCommitState.STATE_SUCCESS -> {
+                log("원장 반영 완료 · 신규 ${snapshot.inserted}건")
+                refreshServerReviews(silent = true)
+            }
+
+            FinanceCommitState.STATE_FAILED ->
+                log("원장 반영 실패 · ${snapshot.error.ifBlank { "재시도 필요" }}")
+        }
     }
 
     private fun renderImportResult(response: JSONObject) {
@@ -463,12 +597,7 @@ class ThinClientActivity : Activity() {
         reviewBox.removeAllViews()
 
         if (items.length() == 0) {
-            reviewBox.addView(
-                TextView(this).apply {
-                    text = "서버 검토 필요 거래 없음"
-                    setPadding(0, dp(4), 0, dp(6))
-                }
-            )
+            showEmptyReviewState()
             return
         }
 
@@ -479,7 +608,12 @@ class ThinClientActivity : Activity() {
             val tx = item.getJSONObject("transaction")
             val reviewType = item.optString("reviewType")
 
-            reviewBox.addView(
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, dp(4), 0, dp(12))
+            }
+
+            card.addView(
                 TextView(this).apply {
                     text =
                         "[$reviewType] " +
@@ -495,38 +629,89 @@ class ThinClientActivity : Activity() {
             )
 
             if (reviewType == "SETTLEMENT") {
-                renderSettlementReview(item)
+                renderSettlementReview(item, card)
             } else {
-                renderCategoryReview(item, taxonomy)
+                renderCategoryReview(item, taxonomy, card)
             }
+
+            reviewBox.addView(card, full())
         }
     }
 
-    private fun renderSettlementReview(item: JSONObject) {
+    private fun showEmptyReviewState() {
+        reviewBox.removeAllViews()
+        reviewBox.addView(
+            TextView(this).apply {
+                text = "서버 검토 필요 거래 없음"
+                setPadding(0, dp(4), 0, dp(6))
+            }
+        )
+    }
+
+    private fun renderSettlementReview(
+        item: JSONObject,
+        container: LinearLayout
+    ) {
+        val options = item.optJSONObject("options") ?: JSONObject()
+        val recommended = options.optJSONObject("recommended") ?: JSONObject()
+        val matchedSourceKey =
+            recommended.optString("sourceKey").ifBlank {
+                item.optString("matchedSourceKey")
+            }
+
+        if (recommended.length() > 0) {
+            val targetDate = recommended.optString("date")
+            val targetMerchant = recommended.optString("merchant")
+            val targetAmount = recommended.optLong("amount")
+            val score = recommended.optInt("score")
+
+            container.addView(
+                TextView(this).apply {
+                    text = buildString {
+                        append("추천 연결 → ")
+                        append(targetDate)
+                        append(" · ")
+                        append(targetMerchant)
+                        append(" · ")
+                        append(money(targetAmount))
+                        append("원")
+                        if (score > 0) append("  (${score}점)")
+                    }
+                    setPadding(0, 0, 0, dp(6))
+                },
+                full()
+            )
+        }
+
         val suggestions =
             item.optJSONArray("suggestions") ?: JSONArray()
 
         for (j in 0 until suggestions.length()) {
             val suggestion = suggestions.getJSONObject(j)
+            val action = suggestion.optString("action")
 
-            reviewBox.addView(
+            container.addView(
                 Button(this).apply {
                     isAllCaps = false
-                    gravity =
-                        Gravity.START or Gravity.CENTER_VERTICAL
+                    gravity = Gravity.START or Gravity.CENTER_VERTICAL
 
                     text =
                         suggestion.optString(
                             "label",
-                            suggestion.optString("action")
+                            action
                         )
 
                     setOnClickListener {
+                        isEnabled = false
+                        text = "처리 중…"
+
                         resolveServerReview(
                             reviewId = item.optString("id"),
-                            action = suggestion.optString("action"),
+                            action = action,
                             category = null,
-                            learnRule = false
+                            learnRule = false,
+                            matchedSourceKey = if (action == "confirm_match") matchedSourceKey else null,
+                            reviewView = container
                         )
                     }
                 },
@@ -537,10 +722,12 @@ class ThinClientActivity : Activity() {
 
     private fun renderCategoryReview(
         item: JSONObject,
-        taxonomy: List<ReviewUiV3.CategoryOption>
+        taxonomy: List<ReviewUiV3.CategoryOption>,
+        container: LinearLayout
     ) {
         val recommendation =
             item.optJSONObject("recommendation") ?: JSONObject()
+        val options = item.optJSONObject("options") ?: JSONObject()
 
         val suggested = ReviewUiV3.Classification(
             type = recommendation.optString("type").trim(),
@@ -551,8 +738,10 @@ class ThinClientActivity : Activity() {
         )
 
         val complete = suggested.isComplete()
+        val allowLearnPattern = options.optBoolean("allowLearnPattern", complete)
+        val learnPatternDefault = options.optBoolean("learnPatternDefault", false)
 
-        reviewBox.addView(
+        container.addView(
             TextView(this).apply {
                 text =
                     if (complete) {
@@ -577,9 +766,10 @@ class ThinClientActivity : Activity() {
 
         val learn = CheckBox(this).apply {
             text = "같은 가맹점에 적용"
-            isChecked = true
+            isChecked = allowLearnPattern && learnPatternDefault
+            visibility = if (allowLearnPattern) View.VISIBLE else View.GONE
         }
-        reviewBox.addView(learn, full())
+        container.addView(learn, full())
 
         val primaryButton = Button(this).apply {
             isAllCaps = false
@@ -604,27 +794,33 @@ class ThinClientActivity : Activity() {
                             .put("major", suggested.major)
                             .put("minor", suggested.minor)
 
+                    isEnabled = false
+                    text = "처리 중…"
+
                     resolveServerReview(
                         reviewId = item.optString("id"),
                         action = "confirm",
                         category = category,
-                        learnRule = learn.isChecked
+                        learnRule = allowLearnPattern && learn.isChecked,
+                        reviewView = container
                     )
                 } else {
                     openClassificationPicker(
                         item = item,
                         suggested = suggested,
                         taxonomy = taxonomy,
-                        learnPatternDefault = learn.isChecked
+                        learnPatternDefault = allowLearnPattern && learn.isChecked,
+                        allowLearnPattern = allowLearnPattern,
+                        reviewView = container
                     )
                 }
             }
         }
 
-        reviewBox.addView(primaryButton, full())
+        container.addView(primaryButton, full())
 
         if (complete) {
-            reviewBox.addView(
+            container.addView(
                 Button(this).apply {
                     isAllCaps = false
                     gravity =
@@ -636,7 +832,9 @@ class ThinClientActivity : Activity() {
                             item = item,
                             suggested = suggested,
                             taxonomy = taxonomy,
-                            learnPatternDefault = learn.isChecked
+                            learnPatternDefault = allowLearnPattern && learn.isChecked,
+                            allowLearnPattern = allowLearnPattern,
+                            reviewView = container
                         )
                     }
                 },
@@ -649,7 +847,9 @@ class ThinClientActivity : Activity() {
         item: JSONObject,
         suggested: ReviewUiV3.Classification?,
         taxonomy: List<ReviewUiV3.CategoryOption>,
-        learnPatternDefault: Boolean
+        learnPatternDefault: Boolean,
+        allowLearnPattern: Boolean,
+        reviewView: View
     ) {
         if (taxonomy.isEmpty()) {
             toast("서버 표준분류를 불러오지 못했습니다.")
@@ -669,7 +869,8 @@ class ThinClientActivity : Activity() {
             transactionTitle = title,
             suggested = suggested,
             taxonomy = taxonomy,
-            learnPatternDefault = learnPatternDefault
+            learnPatternDefault = if (allowLearnPattern) learnPatternDefault else false,
+            showLearnPattern = allowLearnPattern
         ) { selected, learnPattern ->
             val category =
                 JSONObject()
@@ -681,7 +882,8 @@ class ThinClientActivity : Activity() {
                 reviewId = item.optString("id"),
                 action = "confirm",
                 category = category,
-                learnRule = learnPattern
+                learnRule = allowLearnPattern && learnPattern,
+                reviewView = reviewView
             )
         }
     }
@@ -770,44 +972,122 @@ class ThinClientActivity : Activity() {
         reviewId: String,
         action: String,
         category: JSONObject?,
-        learnRule: Boolean
+        learnRule: Boolean,
+        matchedSourceKey: String? = null,
+        reviewView: View? = null
     ) {
         val url = endpoint.text.toString().trim()
         val secret = backendSecret.text.toString()
+        val currentAnalysisId = secure.get("last_analysis_id")
 
         Thread {
+            val client = BackendClient(url, secret)
             try {
-                val response =
-                    BackendClient(url, secret).resolveReview(
-                        reviewId = reviewId,
-                        action = action,
-                        category = category,
-                        learnRule = learnRule
-                    )
+                val response = client.resolveReview(
+                    reviewId = reviewId,
+                    action = action,
+                    category = category,
+                    learnRule = learnRule,
+                    matchedSourceKey = matchedSourceKey
+                )
+
+                val analysisId = response.optString("analysisId").ifBlank { currentAnalysisId }
+                val remaining = response.optInt("remaining", -1)
+                val canCommit = response.optBoolean("canCommit", false)
 
                 runOnUiThread {
-                    if (response.optBoolean("ok", false)) {
-                        log("검토 결과를 서버에 저장했습니다.")
-                        toast("검토 저장 완료")
-                        refreshServerReviews(silent = true)
-                    } else {
-                        val error =
-                            response.optString(
-                                "error",
-                                "unknown error"
-                            )
-
-                        log("검토 저장 실패: $error")
-                        toast("검토 저장 실패")
-                    }
+                    removeResolvedReviewView(reviewView)
+                    log("검토 확정 완료" + if (remaining >= 0) " · 남은 검토 $remaining건" else "")
+                    toast(if (canCommit) "확정 완료 · 원장 반영 예약" else "검토 확정 완료")
                 }
+
+                if (canCommit && analysisId.isNotBlank()) {
+                    FinanceCommitWorker.enqueue(applicationContext, analysisId)
+                    runOnUiThread { refreshBackgroundCommitState(force = true) }
+                }
+
+                runOnUiThread { refreshServerReviews(silent = true) }
+            } catch (e: BackendClient.ReviewTimeoutException) {
+                reconcileReviewAfterTimeout(
+                    client = client,
+                    analysisId = currentAnalysisId,
+                    reviewId = reviewId,
+                    reviewView = reviewView
+                )
             } catch (e: Exception) {
                 runOnUiThread {
-                    log("검토 저장 실패: ${e.message}")
-                    toast("검토 저장 실패")
+                    log("검토 저장 오류 · ${shortError(e)}")
+                    toast("검토 저장 확인 필요")
+                    refreshServerReviews(silent = true)
                 }
             }
         }.start()
+    }
+
+    private fun reconcileReviewAfterTimeout(
+        client: BackendClient,
+        analysisId: String,
+        reviewId: String,
+        reviewView: View?
+    ) {
+        if (analysisId.isBlank()) {
+            runOnUiThread {
+                log("검토 응답 지연 · 검토 큐를 새로고침하세요.")
+                toast("서버 응답 지연 · 새로고침 필요")
+            }
+            return
+        }
+
+        try {
+            val queue = client.reviews(analysisId)
+            val items = queue.optJSONArray("items") ?: JSONArray()
+            var stillPending = false
+            for (i in 0 until items.length()) {
+                if (items.optJSONObject(i)?.optString("id") == reviewId) {
+                    stillPending = true
+                    break
+                }
+            }
+
+            if (!stillPending) {
+                runOnUiThread {
+                    removeResolvedReviewView(reviewView)
+                    log("검토 확정 확인 완료 · 응답만 지연됨")
+                    toast("검토 확정 완료")
+                }
+                if (queue.optBoolean("canCommit", false)) {
+                    FinanceCommitWorker.enqueue(applicationContext, analysisId)
+                    runOnUiThread { refreshBackgroundCommitState(force = true) }
+                }
+            } else {
+                runOnUiThread {
+                    log("검토 저장 지연 · 서버에는 아직 대기 중")
+                    toast("검토 저장 재시도 가능")
+                    refreshServerReviews(silent = true)
+                }
+            }
+        } catch (verifyError: Exception) {
+            runOnUiThread {
+                log("검토 결과 확인 필요 · ${shortError(verifyError)}")
+                toast("검토 큐 새로고침으로 상태를 확인하세요.")
+            }
+        }
+    }
+
+    private fun removeResolvedReviewView(reviewView: View?) {
+        if (reviewView != null && reviewView.parent === reviewBox) {
+            reviewBox.removeView(reviewView)
+            if (reviewBox.childCount == 0) showEmptyReviewState()
+        }
+    }
+
+    private fun shortError(e: Exception): String {
+        val raw = e.message.orEmpty().ifBlank { e::class.java.simpleName }
+        return when {
+            raw.contains("timeout", ignoreCase = true) -> "timeout"
+            raw.length > 90 -> raw.take(87) + "…"
+            else -> raw
+        }
     }
 
     private fun testBackend() {
@@ -833,6 +1113,7 @@ class ThinClientActivity : Activity() {
                         "${response.optString("message", "OK")} · " +
                         "${response.optString("backendVersion", "?")}"
                     )
+                    clearConnectionFocus()
                     toast("서버 연결 성공")
                 }
             } catch (e: Exception) {
@@ -842,6 +1123,21 @@ class ThinClientActivity : Activity() {
                 }
             }
         }.start()
+    }
+
+    private fun clearConnectionFocus() {
+        val focused = currentFocus
+        endpoint.clearFocus()
+        backendSecret.clearFocus()
+
+        if (focused != null) {
+            val imm =
+                getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.hideSoftInputFromWindow(focused.windowToken, 0)
+        }
+
+        window.decorView.isFocusableInTouchMode = true
+        window.decorView.requestFocus()
     }
 
     private fun sectionTitle(text: String) =
@@ -866,9 +1162,12 @@ class ThinClientActivity : Activity() {
             .format(kotlin.math.abs(value))
 
     private fun log(text: String) {
-        logView.text =
-            "${java.time.LocalTime.now().withNano(0)}  " +
-            "$text\n${logView.text}"
+        Log.d("FinanceOS", text)
+        val line = "${java.time.LocalTime.now().withNano(0)}  $text"
+        if (uiLogLines.firstOrNull()?.substringAfter("  ") == text) return
+        uiLogLines.add(0, line)
+        while (uiLogLines.size > MAX_UI_LOG_LINES) uiLogLines.removeAt(uiLogLines.lastIndex)
+        logView.text = uiLogLines.joinToString("\n")
     }
 
     private fun toast(text: String) =
