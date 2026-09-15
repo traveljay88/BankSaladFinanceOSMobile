@@ -29,9 +29,8 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf backend/_server_sync
-          git rm .github/workflows/sync-server-v152.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/Code.gs
+          git add -A backend
           git commit -m "Promote Server Brain v1.5.2 to canonical backend Code.gs"
           git push
