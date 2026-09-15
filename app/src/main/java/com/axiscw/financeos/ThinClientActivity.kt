@@ -36,6 +36,7 @@ class ThinClientActivity : Activity() {
     private lateinit var zipPassword: EditText
     private lateinit var endpoint: EditText
     private lateinit var backendSecret: EditText
+    private lateinit var connectionButton: Button
     private lateinit var summary: TextView
     private lateinit var reviewBox: LinearLayout
     private lateinit var uploadButton: Button
@@ -43,6 +44,7 @@ class ThinClientActivity : Activity() {
     private lateinit var logView: TextView
     private val uiLogLines = mutableListOf<String>()
     private var lastCommitStateToken = ""
+    private var connectionLocked = false
 
     private val backgroundHandler = Handler(Looper.getMainLooper())
     private var lastBackgroundStateToken = ""
@@ -197,17 +199,26 @@ class ThinClientActivity : Activity() {
         root.addView(endpoint, full())
         root.addView(backendSecret, full())
 
-        root.addView(
-            Button(this).apply {
-                text = "연결 설정 저장"
-                setOnClickListener {
+        connectionButton = Button(this).apply {
+            text = "연결 설정 저장"
+            setOnClickListener {
+                if (connectionLocked) {
+                    setConnectionLocked(false)
+                    toast("연결 설정을 수정할 수 있습니다.")
+                } else {
+                    val url = endpoint.text.toString().trim()
+                    val secret = backendSecret.text.toString()
+                    if (url.isBlank() || secret.isBlank()) {
+                        toast("Apps Script URL과 APP_SECRET을 입력하세요.")
+                        return@setOnClickListener
+                    }
                     saveSettings()
-                    clearConnectionFocus()
+                    setConnectionLocked(true)
                     toast("설정을 저장했습니다.")
                 }
-            },
-            full()
-        )
+            }
+        }
+        root.addView(connectionButton, full())
 
         root.addView(
             Button(this).apply {
@@ -246,12 +257,29 @@ class ThinClientActivity : Activity() {
         zipPassword.setText(secure.get("zip_password"))
         endpoint.setText(secure.get("endpoint"))
         backendSecret.setText(secure.get("backend_secret"))
+        setConnectionLocked(
+            endpoint.text.toString().trim().isNotBlank() &&
+                backendSecret.text.toString().isNotBlank()
+        )
     }
 
     private fun saveSettings() {
         secure.put("zip_password", zipPassword.text.toString())
         secure.put("endpoint", endpoint.text.toString().trim())
         secure.put("backend_secret", backendSecret.text.toString())
+    }
+
+    private fun setConnectionLocked(locked: Boolean) {
+        connectionLocked = locked
+        listOf(endpoint, backendSecret).forEach { field ->
+            field.isFocusable = !locked
+            field.isFocusableInTouchMode = !locked
+            field.isCursorVisible = !locked
+            field.isClickable = !locked
+            field.isLongClickable = !locked
+        }
+        connectionButton.text = if (locked) "연결 설정 수정" else "연결 설정 저장"
+        if (locked) clearConnectionFocus()
     }
 
     private fun openPicker() =
@@ -897,7 +925,6 @@ class ThinClientActivity : Activity() {
 
         val result =
             mutableListOf<ReviewUiV3.CategoryOption>()
-
         val majorKeys = standard.keys()
 
         while (majorKeys.hasNext()) {
@@ -1113,7 +1140,7 @@ class ThinClientActivity : Activity() {
                         "${response.optString("message", "OK")} · " +
                         "${response.optString("backendVersion", "?")}"
                     )
-                    clearConnectionFocus()
+                    setConnectionLocked(true)
                     toast("서버 연결 성공")
                 }
             } catch (e: Exception) {
