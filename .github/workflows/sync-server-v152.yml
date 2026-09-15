@@ -13,17 +13,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Rebuild canonical backend Code.gs
         shell: bash
         run: |
           set -euo pipefail
-          : > backend/Code.gs
-          for f in backend/_server_sync/part-*.b64; do
-            base64 -d "$f" >> backend/Code.gs
-          done
+          test "$(find backend/_server_sync -maxdepth 1 -name 'gz-*.b64' | wc -l)" -eq 5
+          cat backend/_server_sync/gz-*.b64 | base64 -d | gzip -d > backend/Code.gs
+          test "$(wc -c < backend/Code.gs)" -eq 184077
+          test "$(sha256sum backend/Code.gs | awk '{print $1}')" = "155754d81c5626bee378b87b7eae29dbdc12c71a6c082bf3d8c738af351059ed"
           grep -q "const BACKEND_VERSION = '1.5.2';" backend/Code.gs
           grep -q "const POLICY_VERSION = '3.5.2';" backend/Code.gs
           test "$(wc -l < backend/Code.gs)" -ge 4800
+
       - name: Commit canonical source and clean temporary sync files
         shell: bash
         run: |
