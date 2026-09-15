@@ -44,6 +44,7 @@ for key, pair in expected.items():
 
 main = (ROOT / "app/src/main/java/com/axiscw/financeos/MainActivity.kt").read_text(encoding="utf-8")
 thin = (ROOT / "app/src/main/java/com/axiscw/financeos/ThinClientActivity.kt").read_text(encoding="utf-8")
+worker = (ROOT / "app/src/main/java/com/axiscw/financeos/FinanceUploadWorker.kt").read_text(encoding="utf-8")
 extractor = (ROOT / "app/src/main/java/com/axiscw/financeos/BankSaladTransactionExtractor.kt").read_text(encoding="utf-8")
 file_input = (ROOT / "app/src/main/java/com/axiscw/financeos/FileInput.kt").read_text(encoding="utf-8")
 client = (ROOT / "app/src/main/java/com/axiscw/financeos/BackendClient.kt").read_text(encoding="utf-8")
@@ -57,13 +58,20 @@ assert "reviewCount > 0 || provisionalCount > 0" in backend
 assert "compileSdk = 36" in build and "targetSdk = 36" in build
 assert "platforms;android-36" in workflow
 
-# v0.4 must launch the server-driven client and keep policy decisions off-device.
+# Server-driven client invariants. Upload/commit now run through WorkManager so the
+# app can leave the foreground without losing the long-running request.
 assert 'android:name=".ThinClientActivity"' in manifest
 assert "FinancePipeline(" not in thin and "AppConfig.load" not in thin
-assert "engineImport(payload)" in thin and '"analyze"' in client and '"rawTransactions"' in client
+assert "FinanceUploadWorker.enqueue(this, payload)" in thin
+assert "engineImport(prepared)" in worker
+assert '"analyze"' in client and '"rawTransactions"' in client
 assert '"getReviewQueue"' in client and '"confirmReview"' in client
-assert "secure.put" in thin and '"last_analysis_id"' in thin
+assert "class FinanceUploadWorker" in worker and "class FinanceCommitWorker" in worker
+assert "WorkManager.getInstance" in worker
+assert "androidx.work:work-runtime-ktx" in build
+assert "secure.put(\"last_analysis_id\"" in worker
 assert "refreshServerReviews(silent = true)" in thin
+assert "MAX_UI_LOG_LINES = 8" in thin
 assert "text/csv" in manifest and 'endsWith(".csv")' in file_input
 
-print("PASS: Finance Policy 2.0.0 and Thin Client package invariants")
+print("PASS: Finance Policy 2.0.0 and WorkManager Thin Client package invariants")
