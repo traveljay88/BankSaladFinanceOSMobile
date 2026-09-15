@@ -17,7 +17,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat backend/_server_sync/part-*.txt > backend/Code.gs
+          : > backend/Code.gs
+          for f in backend/_server_sync/part-*.b64; do
+            base64 -d "$f" >> backend/Code.gs
+          done
           grep -q "const BACKEND_VERSION = '1.5.2';" backend/Code.gs
           grep -q "const POLICY_VERSION = '3.5.2';" backend/Code.gs
           test "$(wc -l < backend/Code.gs)" -ge 4800
