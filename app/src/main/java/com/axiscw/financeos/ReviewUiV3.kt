@@ -19,6 +19,7 @@ import android.widget.Toast
  * - incomplete recommendation is never confirmable as a recommendation
  * - no free-text classification
  * - payload always contains type / major / minor
+ * - learning checkbox can be hidden for per-transaction merchants such as Coupang
  *
  * Pass uiSchema.standardCategories from the server as taxonomy.
  */
@@ -45,6 +46,7 @@ object ReviewUiV3 {
         suggested: Classification?,
         taxonomy: List<CategoryOption>,
         learnPatternDefault: Boolean = true,
+        showLearnPattern: Boolean = true,
         onConfirm: (Classification, learnPattern: Boolean) -> Unit
     ) {
         require(taxonomy.isNotEmpty()) { "standardCategories taxonomy is empty" }
@@ -128,7 +130,8 @@ object ReviewUiV3 {
 
         val learn = CheckBox(context).apply {
             text = "같은 패턴에 자동 적용"
-            isChecked = learnPatternDefault
+            isChecked = showLearnPattern && learnPatternDefault
+            visibility = if (showLearnPattern) View.VISIBLE else View.GONE
         }
         box.addView(learn)
 
@@ -153,7 +156,7 @@ object ReviewUiV3 {
                     Toast.makeText(context, "type / major / minor를 모두 선택하세요.", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
-                onConfirm(selected, learn.isChecked)
+                onConfirm(selected, showLearnPattern && learn.isChecked)
                 dialog.dismiss()
             }
         }
