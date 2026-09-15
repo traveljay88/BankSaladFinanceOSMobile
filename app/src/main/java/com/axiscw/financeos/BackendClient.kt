@@ -8,8 +8,11 @@ import java.net.URL
 
 class BackendClient(private val endpoint: String, private val secret: String) {
     companion object {
-        /** Apps Script may need time to batch-write the ledger and create reviews. */
+        /** Long-running analysis/commit budget for Apps Script. */
         const val UPLOAD_READ_TIMEOUT_MS = 180_000
+        const val REVIEW_READ_TIMEOUT_MS = 120_000
+        const val REVIEW_RECONCILE_TIMEOUT_MS = 60_000
+        const val COMMIT_READ_TIMEOUT_MS = 180_000
     }
 
     class UploadTimeoutException(
@@ -17,6 +20,11 @@ class BackendClient(private val endpoint: String, private val secret: String) {
         val sourceHash: String,
         cause: SocketTimeoutException
     ) : IllegalStateException("서버 응답 대기 시간이 초과되었습니다.", cause)
+
+    class ReviewTimeoutException(
+        val reviewId: String,
+        cause: SocketTimeoutException
+    ) : IllegalStateException("검토 저장 응답이 지연되었습니다.", cause)
 
     /** Adapts the mobile client to the deployed Server Brain protocol. */
     fun engineImport(prepared: PreparedImport): JSONObject = try {
@@ -191,7 +199,8 @@ class BackendClient(private val endpoint: String, private val secret: String) {
             JSONObject()
                 .put("action", "getReviewQueue")
                 .put("secret", secret)
-                .put("analysisId", analysisId)
+                .put("analysisId", analysisId),
+            REVIEW_RECONCILE_TIMEOUT_MS
         )
 
         val source = response.optJSONArray("reviewQueue") ?: JSONArray()
@@ -203,6 +212,7 @@ class BackendClient(private val endpoint: String, private val secret: String) {
             val review = source.getJSONObject(i)
             val settlement = review.optString("reviewType") == "SETTLEMENT_LINK"
             val recommendation = review.optJSONObject("recommendation") ?: JSONObject()
+            val options = review.optJSONObject("options") ?: JSONObject()
 
             val type = recommendation.optString("type").trim()
             val major = recommendation.optString("major").trim()
@@ -226,6 +236,8 @@ class BackendClient(private val endpoint: String, private val secret: String) {
 
                 put("reason", review.optString("reason"))
                 put("recommendation", recommendation)
+                put("matchedSourceKey", review.optString("matchedSourceKey"))
+                put("options", options)
 
                 put("suggestions", JSONArray().apply {
                     if (settlement) {
@@ -274,7 +286,8 @@ class BackendClient(private val endpoint: String, private val secret: String) {
         reviewId: String,
         action: String,
         category: JSONObject? = null,
-        learnRule: Boolean = false
+        learnRule: Boolean = false,
+        matchedSourceKey: String? = null
     ): JSONObject {
         require(reviewId.isNotBlank()) { "reviewId is required" }
 
@@ -303,18 +316,30 @@ class BackendClient(private val endpoint: String, private val secret: String) {
             payload.put("minor", category.optString("minor").trim())
         }
 
-        val resolved = post(payload)
-
-        if (resolved.optBoolean("canCommit", false)) {
-            post(
-                JSONObject()
-                    .put("action", "commit")
-                    .put("secret", secret)
-                    .put("analysisId", resolved.getString("analysisId"))
-            )
+        if (!matchedSourceKey.isNullOrBlank()) {
+            payload.put("matchedSourceKey", matchedSourceKey.trim())
         }
 
-        return resolved
+        // Review confirmation and canonical ledger commit are intentionally two
+        // separate requests. A timeout here is treated as uncertain, not as a hard
+        // failure: the Activity re-reads the review queue and reconciles server truth.
+        return try {
+            post(payload, REVIEW_READ_TIMEOUT_MS)
+        } catch (e: SocketTimeoutException) {
+            throw ReviewTimeoutException(reviewId, e)
+        }
+    }
+
+    fun commitAnalysis(analysisId: String): JSONObject {
+        require(analysisId.isNotBlank()) { "analysisId is required" }
+
+        return post(
+            JSONObject()
+                .put("action", "commit")
+                .put("secret", secret)
+                .put("analysisId", analysisId),
+            COMMIT_READ_TIMEOUT_MS
+        )
     }
 
     private fun post(
