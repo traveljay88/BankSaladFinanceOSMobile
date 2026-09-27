@@ -1024,7 +1024,7 @@ class ThinClientActivity : Activity() {
 
                 runOnUiThread {
                     removeResolvedReviewView(reviewView)
-                    log("검토 확정 완료" + if (remaining >= 0) " · 남은 검토 $remaining건" else "")
+                    log("검토 확정 완료" + if (remaining >= 0) " · 남은 검토 ${remaining}건" else "")
                     toast(if (canCommit) "확정 완료 · 원장 반영 예약" else "검토 확정 완료")
                 }
 
@@ -1138,7 +1138,7 @@ class ThinClientActivity : Activity() {
                     log(
                         "서버 연결 성공: " +
                         "${response.optString("message", "OK")} · " +
-                        "${response.optString("backendVersion", "?")}"
+                        ServerCompatibility.summary(response)
                     )
                     setConnectionLocked(true)
                     toast("서버 연결 성공")
