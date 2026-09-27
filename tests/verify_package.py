@@ -49,6 +49,8 @@ extractor = (ROOT / "app/src/main/java/com/axiscw/financeos/BankSaladTransaction
 file_input = (ROOT / "app/src/main/java/com/axiscw/financeos/FileInput.kt").read_text(encoding="utf-8")
 client = (ROOT / "app/src/main/java/com/axiscw/financeos/BackendClient.kt").read_text(encoding="utf-8")
 manifest = (ROOT / "app/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
+build_gradle = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
+compat = (ROOT / "app/src/main/java/com/axiscw/financeos/ServerCompatibility.kt").read_text(encoding="utf-8")
 backend = (ROOT / "backend/Code.gs").read_text(encoding="utf-8")
 build = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/build-apk.yml").read_text(encoding="utf-8")
@@ -71,6 +73,16 @@ assert "WorkManager.getInstance" in worker
 assert "androidx.work:work-runtime-ktx" in build
 assert "secure.put(\"last_analysis_id\"" in worker
 assert "refreshServerReviews(silent = true)" in thin
+assert 'versionCode = 10' in build_gradle
+assert 'versionName = "0.6.0"' in build_gradle
+assert 'MIN_BACKEND_VERSION = "1.8.1"' in compat
+assert 'MIN_POLICY_VERSION = "3.8.0"' in compat
+assert 'REQUIRED_PROTOCOL_VERSION = 1' in compat
+assert 'health()' in client
+assert 'ServerCompatibility.requireCompatible(analysis)' in client
+assert 'ServerCompatibility.requireCompatible(obj)' in client
+assert '" · 남은 검토 ${remaining}건"' in thin
+assert not (ROOT / "app/src/main/java/com/axiscw/financeos/BuildCompatibility.kt").exists()
 assert "MAX_UI_LOG_LINES = 8" in thin
 assert "text/csv" in manifest and 'endsWith(".csv")' in file_input
 
