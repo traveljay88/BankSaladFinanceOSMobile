@@ -28,6 +28,9 @@ class BackendClient(private val endpoint: String, private val secret: String) {
 
     /** Adapts the mobile client to the deployed Server Brain protocol. */
     fun engineImport(prepared: PreparedImport): JSONObject = try {
+        // Fail fast before any analysis/commit mutation when the deployed server is stale.
+        health()
+
         val analysis = post(JSONObject().apply {
             put("action", "analyze")
             put("secret", secret)
@@ -37,6 +40,7 @@ class BackendClient(private val endpoint: String, private val secret: String) {
             put("rawTransactions", prepared.transactionsJson())
         }, UPLOAD_READ_TIMEOUT_MS)
 
+        ServerCompatibility.requireCompatible(analysis)
         val analysisId = analysis.getString("analysisId")
 
         val commit = if (analysis.optBoolean("canCommit", false)) {
@@ -191,6 +195,7 @@ class BackendClient(private val endpoint: String, private val secret: String) {
         if (!obj.optBoolean("ok", false)) {
             error(obj.optString("error", "Finance OS 서버 연결 실패"))
         }
+        ServerCompatibility.requireCompatible(obj)
         return obj
     }
 
